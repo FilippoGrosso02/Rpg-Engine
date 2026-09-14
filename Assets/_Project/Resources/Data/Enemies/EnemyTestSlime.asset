@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0af3713ee72b0604887764caf7d7c28f, type: 3}
+  m_Name: EnemyTestSlime
+  m_EditorClassIdentifier:
+  id: enemy_test_slime
+  displayName: Test Slime
+  sprite: {fileID: 0}
+  hp: 15
+  atk: 3
+  def: 2
+  speed: 4
+  skillIds:
+  - skill_test_strike
+  aiTag: basic_melee
+  lootTable:
+  - itemId: item_test_potion
+    dropChance: 0.5
