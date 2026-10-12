@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e9ee9e9e22101c449e08cbf03d64645, type: 3}
+  m_Name: actor_gypsy_witch
+  m_EditorClassIdentifier: Game.Data::Game.Data.Definitions.ActorDefinition
+  id: actor_gypsy_witch
+  displayName: The Gypsy Witch
+  portrait: {fileID: 0}
+  battleModelPrefab: {fileID: 944304184450455280, guid: 79a18d6704d384d408e11db207f92d8d, type: 3}
+  classId: 
+  baseHp: 14
+  baseMp: 0
+  baseAtk: 4
+  baseDef: 5
+  baseSpeed: 5
+  moveRange: 6
+  attackRangeMultiplier: 4
+  roleLabel: Hex Caster
+  startingSkillIds:
+  - skill_basic_attack
+  - skill_witch_hex_of_weakness
+  - skill_witch_curse_of_dread
+  - skill_witch_hexbolt
+  startingWeaponId: 
+  startingArmorId: 

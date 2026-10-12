@@ -1,0 +1,26 @@
+{
+    "name": "Game.Combat.Tests.EditMode",
+    "rootNamespace": "",
+    "references": [
+        "Game.Data",
+        "Game.Combat.Contracts",
+        "Game.Combat.TrailsBattle3D",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

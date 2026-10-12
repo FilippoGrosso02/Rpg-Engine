@@ -1,0 +1,25 @@
+{
+    "name": "Game.Combat.Tests.PlayMode",
+    "rootNamespace": "",
+    "references": [
+        "Game.Data",
+        "Game.Combat.Contracts",
+        "Game.Combat.TrailsBattle3D",
+        "Game.Combat.UI.UGUI",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

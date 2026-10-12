@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0af3713ee72b0604887764caf7d7c28f, type: 3}
+  m_Name: enemy_boss
+  m_EditorClassIdentifier: Game.Data::Game.Data.Definitions.EnemyDefinition
+  id: enemy_boss
+  displayName: Boss
+  sprite: {fileID: 0}
+  battleModelPrefab: {fileID: 4512916267656287747, guid: 46ea42103a7c38a40be3bc2c45cde89a, type: 3}
+  hp: 45
+  atk: 9
+  def: 6
+  speed: 4
+  moveRange: 6
+  attackRangeMultiplier: 1
+  isHorror: 1
+  roleLabel: Over-Budget Centerpiece
+  skillIds:
+  - skill_basic_attack
+  - skill_boss_crushing_blow
+  - skill_boss_dread_aura
+  aiTag: 
+  lootTable: []

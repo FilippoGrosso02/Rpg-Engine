@@ -11,10 +11,12 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4e9ee9e9e22101c449e08cbf03d64645, type: 3}
   m_Name: ActorTestHero
-  m_EditorClassIdentifier:
+  m_EditorClassIdentifier: 
   id: actor_test_hero
   displayName: Test Hero
   portrait: {fileID: 0}
+  battleModelPrefab: {fileID: 944304184450455280, guid: 79a18d6704d384d408e11db207f92d8d,
+    type: 3}
   classId: class_test_warrior
   baseHp: 20
   baseMp: 10
@@ -23,5 +25,6 @@ MonoBehaviour:
   baseSpeed: 5
   startingSkillIds:
   - skill_test_strike
+  - skill_test_aoe_burst
   startingWeaponId: weapon_test_sword
   startingArmorId: armor_test_shield

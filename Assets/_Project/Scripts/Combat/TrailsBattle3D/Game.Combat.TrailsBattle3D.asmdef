@@ -1,0 +1,17 @@
+{
+    "name": "Game.Combat.TrailsBattle3D",
+    "rootNamespace": "",
+    "references": [
+        "Game.Combat.Contracts",
+        "Game.Data"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
