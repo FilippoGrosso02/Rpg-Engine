@@ -1,0 +1,18 @@
+{
+    "name": "Game.Overworld",
+    "rootNamespace": "",
+    "references": [
+        "Game.Data",
+        "Game.Combat.Contracts",
+        "Game.Services"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -11,5 +11,8 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/_Project/Scenes/Battle/BattleArena_01.unity
     guid: 13e0b30c91940a2458b2c4dc5d59d157
+  - enabled: 1
+    path: Assets/_Project/Scenes/Overworld/Dungeon_01.unity
+    guid: d8a6d26adcea48840b8ac71b4c3c7df3
   m_configObjects:
     com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f, type: 2}
