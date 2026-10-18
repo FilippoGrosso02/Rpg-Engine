@@ -1,5 +1,7 @@
 using System.Collections;
 using Game.Combat.Contracts;
+using Game.Data.Definitions;
+using Game.Data.State;
 using Game.Services;
 using UnityEngine;
 
@@ -22,9 +24,14 @@ namespace Game.Overworld
         /// <summary>Test seam: when set, used instead of <see cref="combatSystemConfig"/> to start a battle.</summary>
         public System.Action<EncounterDefinition, System.Action<EncounterResult>> encounterStarter;
 
+        [Tooltip("Party the player starts with (pick heroes from the database). Only applied the first time in a session.")]
+        public PartyRosterDefinition startingRoster;
+
         public bool InBattle { get; private set; }
 
         OverworldEnemy _activeEnemy;
+
+        void Awake() => PartyRoster.EnsureInitialized(startingRoster);
 
         void OnEnable() => OverworldEnemy.PlayerContacted += BeginEncounter;
         void OnDisable() => OverworldEnemy.PlayerContacted -= BeginEncounter;
@@ -66,7 +73,8 @@ namespace Game.Overworld
             }
             else
             {
-                // Placeholder defeat handling: back to the entrance, everything resets.
+                // Placeholder defeat handling: back to the entrance, everything resets (party fully healed).
+                PartyState.HealAll();
                 if (player != null && respawnPoint != null) player.Teleport(respawnPoint.position);
                 var cam = FindAnyObjectByType<TopDownCamera>();
                 if (cam != null) cam.Snap();

@@ -30,5 +30,6 @@ MonoBehaviour:
   - skill_exorcist_holy_water_splash
   - skill_exorcist_cleansing_rite
   - skill_exorcist_banish
+  - skill_exorcist_resurrection
   startingWeaponId: 
   startingArmorId: 

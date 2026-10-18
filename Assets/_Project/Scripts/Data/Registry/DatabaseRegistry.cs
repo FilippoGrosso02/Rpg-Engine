@@ -131,6 +131,13 @@ namespace Game.Data.Registry
             return Get(s_actors, id, "Actor");
         }
 
+        /// <summary>Every actor (hero) definition in the database, for roster building and debug tools.</summary>
+        public static IReadOnlyCollection<ActorDefinition> GetAllActors()
+        {
+            EnsureInitialized();
+            return s_actors.Values;
+        }
+
         public static WeaponDefinition GetWeapon(string id)
         {
             EnsureInitialized();

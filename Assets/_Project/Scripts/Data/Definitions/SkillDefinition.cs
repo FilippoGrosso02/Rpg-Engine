@@ -58,5 +58,10 @@ namespace Game.Data.Definitions
         /// target's HP instead of dealing damage.</summary>
         public bool isHeal;
         public int healBonus;
+
+        /// <summary>True for revive cards: targets a defeated ally (SingleAlly) and brings them back
+        /// to <see cref="reviveHp"/> HP with fear and statuses cleared. They act again from the next round.</summary>
+        public bool isRevive;
+        public int reviveHp = 1;
     }
 }

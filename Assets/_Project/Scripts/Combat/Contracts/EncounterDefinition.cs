@@ -11,6 +11,10 @@ namespace Game.Combat.Contracts
     [CreateAssetMenu(fileName = "NewEncounter", menuName = "Combat/Encounter Definition")]
     public class EncounterDefinition : ScriptableObject
     {
+        [Tooltip("Off (default): the fight uses the player's current PartyRoster once one exists. On: always use partyActorIds below (scripted fights, tests).")]
+        public bool useFixedParty;
+
+        [Tooltip("Fixed party. Only used when 'Use Fixed Party' is on, or as a fallback when no PartyRoster has been set up.")]
         public List<string> partyActorIds = new List<string>();
         public List<string> enemyIds = new List<string>();
     }

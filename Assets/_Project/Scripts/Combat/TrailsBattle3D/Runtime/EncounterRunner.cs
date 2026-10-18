@@ -6,6 +6,7 @@ using Game.Combat.Contracts;
 using Game.Data.Definitions;
 using Game.Data.Enums;
 using Game.Data.Registry;
+using Game.Data.State;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.SceneManagement;
@@ -155,7 +156,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             _combatants = new List<CombatantRuntime>();
             _views = new Dictionary<CombatantRuntime, GameObject>();
 
-            SpawnParty(_encounter.partyActorIds);
+            SpawnParty(ResolvePartyIds(_encounter));
             SpawnEnemies(_encounter.enemyIds);
 
             _scheduler = new TurnScheduler(_combatants);
@@ -231,6 +232,11 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             if (result == null)
             {
                 result = BuildTimeoutResult();
+            }
+
+            if (result.victory)
+            {
+                SavePartyState();
             }
 
             OnEncounterEnded?.Invoke(result);
@@ -340,6 +346,20 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
             var nearestOpponent = forcedTarget ?? opponents.OrderBy(o => Vector3.Distance(actor.position, o.position)).First();
 
+            // Bringing a fallen ally back beats everything else the actor could do with its AP.
+            var fallenAlly = _combatants.FirstOrDefault(c => c.isPlayerSide == actor.isPlayerSide && c.IsDefeated);
+            if (fallenAlly != null)
+            {
+                foreach (var skillId in actor.skillIds)
+                {
+                    var reviveSkill = DatabaseRegistry.GetSkill(skillId);
+                    if (reviveSkill != null && reviveSkill.isRevive && actor.currentAp >= reviveSkill.apCost)
+                    {
+                        return (reviveSkill, fallenAlly, false);
+                    }
+                }
+            }
+
             for (int i = 1; i < actor.skillIds.Count; i++)
             {
                 var skill = DatabaseRegistry.GetSkill(actor.skillIds[i]);
@@ -360,6 +380,16 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                     case TargetType.SingleAlly:
                     case TargetType.AllAllies:
                     {
+                        if (skill.isRevive)
+                        {
+                            var fallen = _combatants.FirstOrDefault(c => c.isPlayerSide == actor.isPlayerSide && c.IsDefeated);
+                            if (fallen != null)
+                            {
+                                return (skill, fallen, false);
+                            }
+                            break;
+                        }
+
                         var neediest = allies
                             .Where(c => c != actor)
                             .OrderBy(c => (float)c.currentHp / c.maxHp)
@@ -411,7 +441,26 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
                 if (targeting != null && Input.GetMouseButtonDown(0))
                 {
-                    if (targeting.TryRaycastCombatant(out var view)
+                    // Heal / revive: pick among allies on screen (defeated allies are hidden and have no
+                    // collider, so this is a screen-proximity pick rather than a raycast). A click that
+                    // misses every ally falls through to ground movement below.
+                    if (IsAllyTargetedSkill(_pendingSkill)
+                        && targeting.TryPickNearestOnScreen(AllyTargetCandidates(actor, _pendingSkill), out var ally))
+                    {
+                        if (actor.currentAp >= _pendingSkill.apCost)
+                        {
+                            var allySkill = _pendingSkill;
+                            var allyRange = AttackRangeFor(actor);
+                            yield return MoveWithinRange(actor, ally.position, allyRange);
+                            if (Vector3.Distance(actor.position, ally.position) <= allyRange + 0.1f)
+                            {
+                                ExecuteSkill(actor, allySkill, ally);
+                                break;
+                            }
+                        }
+                    }
+                    else if (!IsAllyTargetedSkill(_pendingSkill)
+                        && targeting.TryRaycastCombatant(out var view)
                         && view.Runtime != null
                         && !view.Runtime.IsDefeated
                         && view.Runtime.isPlayerSide != actor.isPlayerSide)
@@ -473,6 +522,20 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 return;
             }
 
+            if (IsAllyTargetedSkill(_pendingSkill))
+            {
+                _movementPathPreview.Hide();
+                if (targeting.TryPickNearestOnScreen(AllyTargetCandidates(actor, _pendingSkill), out var hoveredAlly))
+                {
+                    _hoverHighlightRing.ShowOn(hoveredAlly.viewTransform, AllyHighlightColor);
+                }
+                else
+                {
+                    _hoverHighlightRing.Hide();
+                }
+                return;
+            }
+
             if (targeting.TryRaycastCombatant(out var hoveredView)
                 && hoveredView.Runtime != null
                 && !hoveredView.Runtime.IsDefeated)
@@ -497,6 +560,17 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             {
                 _movementPathPreview.Hide();
             }
+        }
+
+        private static bool IsAllyTargetedSkill(SkillDefinition skill)
+        {
+            return skill != null && skill.targetType == TargetType.SingleAlly;
+        }
+
+        /// <summary>Who a single-ally skill can be aimed at: fallen allies for a revive, living allies (self included) otherwise.</summary>
+        private IEnumerable<CombatantRuntime> AllyTargetCandidates(CombatantRuntime actor, SkillDefinition skill)
+        {
+            return _combatants.Where(c => c.isPlayerSide == actor.isPlayerSide && c.IsDefeated == skill.isRevive);
         }
 
         private static SkillDefinition GetFirstUsableSkill(CombatantRuntime actor)
@@ -655,10 +729,14 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             {
                 // Bodyguard: a full one-time redirect onto the protector, resolved as if the
                 // attack targeted them from the start (their DEF/fear, not the original ally's).
-                var target = ResolveBodyguardRedirect(rawTarget);
+                var target = skill.isRevive ? rawTarget : ResolveBodyguardRedirect(rawTarget);
                 var wasAlive = !target.IsDefeated;
 
-                if (skill.isHeal)
+                if (skill.isRevive)
+                {
+                    ActionResolver.ApplyRevive(target, skill);
+                }
+                else if (skill.isHeal)
                 {
                     int healed = UnityEngine.Random.Range(1, 7) + skill.healBonus;
                     target.currentHp = Mathf.Min(target.maxHp, target.currentHp + healed);
@@ -782,6 +860,17 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             OnTurnOrderChanged?.Invoke(_scheduler.PreviewUpcomingOrder(TurnOrderPreviewCount));
         }
 
+        /// <summary>The player's roster if one is set up (and the encounter doesn't force its own party); otherwise the encounter's list.</summary>
+        private static List<string> ResolvePartyIds(EncounterDefinition encounter)
+        {
+            if (!encounter.useFixedParty && PartyRoster.Count > 0)
+            {
+                return new List<string>(PartyRoster.Members);
+            }
+
+            return encounter.partyActorIds;
+        }
+
         private void SpawnParty(List<string> actorIds)
         {
             for (int i = 0; i < actorIds.Count; i++)
@@ -860,7 +949,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 roleLabel = actorDef.roleLabel,
                 isPlayerSide = true,
                 maxHp = actorDef.baseHp,
-                currentHp = actorDef.baseHp,
+                currentHp = PartyState.GetStartingHp(actorDef.id, actorDef.baseHp),
                 maxEp = actorDef.baseMp,
                 currentEp = actorDef.baseMp,
                 atk = actorDef.baseAtk + atkBonus,
@@ -972,6 +1061,15 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             }
 
             return null;
+        }
+
+        /// <summary>Carries each ally's remaining HP into the next fight (knocked-out allies come back at 1 HP).</summary>
+        private void SavePartyState()
+        {
+            foreach (var ally in _combatants.Where(c => c.isPlayerSide))
+            {
+                PartyState.SetHp(ally.definitionId, ally.currentHp);
+            }
         }
 
         private EncounterResult CheckWinLoss()

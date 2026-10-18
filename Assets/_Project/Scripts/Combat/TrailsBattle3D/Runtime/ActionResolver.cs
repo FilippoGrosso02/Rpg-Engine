@@ -144,6 +144,26 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             return info;
         }
 
+        /// <summary>
+        /// Brings a defeated combatant back at <see cref="SkillDefinition.reviveHp"/> HP (at least 1, at most max HP),
+        /// clearing fear, statuses and one-turn flags. Returns false (and changes nothing) if the target is still standing.
+        /// </summary>
+        public static bool ApplyRevive(CombatantRuntime target, SkillDefinition skill)
+        {
+            if (target == null || !target.IsDefeated)
+            {
+                return false;
+            }
+
+            target.currentHp = Mathf.Clamp(skill.reviveHp, 1, Mathf.Max(1, target.maxHp));
+            target.fear = 0;
+            target.wasHitSinceLastTurn = false;
+            target.guarding = false;
+            target.untargetable = false;
+            target.statuses.Clear();
+            return true;
+        }
+
         public static void ApplyGuard(CombatantRuntime combatant)
         {
             combatant.guarding = true;

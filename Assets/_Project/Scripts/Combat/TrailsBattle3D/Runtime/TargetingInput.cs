@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using Game.Combat.Contracts;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -38,6 +40,40 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Picks the candidate whose body is closest to the mouse on screen (within <paramref name="maxPixels"/>).
+        /// Needed for hidden, collider-less targets such as a defeated ally about to be revived.
+        /// </summary>
+        public bool TryPickNearestOnScreen(IEnumerable<CombatantRuntime> candidates, out CombatantRuntime picked, float maxPixels = 90f)
+        {
+            picked = null;
+
+            if (arenaCamera == null || IsPointerOverUi())
+            {
+                return false;
+            }
+
+            Vector2 mouse = Input.mousePosition;
+            float best = maxPixels;
+            foreach (var candidate in candidates)
+            {
+                Vector3 screen = arenaCamera.WorldToScreenPoint(candidate.position + Vector3.up * 1f);
+                if (screen.z <= 0f)
+                {
+                    continue;
+                }
+
+                float distance = Vector2.Distance(mouse, new Vector2(screen.x, screen.y));
+                if (distance < best)
+                {
+                    best = distance;
+                    picked = candidate;
+                }
+            }
+
+            return picked != null;
         }
 
         public bool TryRaycastGround(out Vector3 point)
