@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Game.Combat.Contracts;
+using Game.Common.Area;
 using Game.Data.Definitions;
 using Game.Data.Enums;
 using UnityEngine;
@@ -23,7 +24,11 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         /// of the old unlimited-range Ranged trait.</summary>
         public const float RangeUnit = 2f;
 
-        private const float AoeRadius = 3.5f;
+        public const float DefaultAoeRadius = 3.5f;
+        public const float DefaultConeLength = 6f;
+        public const float DefaultConeAngle = 90f;
+        public const float DefaultLineLength = 8f;
+        public const float DefaultLineWidth = 2f;
         private const int GuardDefBonus = 2;
         private const int DefaultCritThreshold = 6;
 
@@ -61,16 +66,57 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 case TargetType.AreaLine:
                 default:
                 {
-                    // Only AreaCircle is implemented for the one sample AOE craft in this
-                    // phase; Cone/Line fall back to a circle centered on the primary target.
-                    var center = primaryTarget != null ? primaryTarget.position : user.position;
+                    // Circle: centred on the primary target. Cone / Line: start at the caster and point at the primary target.
+                    // The same AreaShape drives the on-screen preview, so what is shown is what is hit.
+                    if (!TryGetAreaShape(skill, out var shape))
+                    {
+                        shape = AreaShape.Circle(DefaultAoeRadius);
+                    }
+
+                    var aim = primaryTarget != null ? primaryTarget.position : user.position;
+                    GetAreaFrame(skill, user.position, aim, out var origin, out var forward);
+
                     return allCombatants
                         .Where(c => !c.IsDefeated
                                     && c.isPlayerSide != user.isPlayerSide
-                                    && Vector3.Distance(c.position, center) <= AoeRadius)
+                                    && shape.Contains(origin, forward, c.position))
                         .ToList();
                 }
             }
+        }
+
+        /// <summary>The ground-plane shape of an area skill (size/angle/width from the skill, falling back to defaults). False for non-area skills.</summary>
+        public static bool TryGetAreaShape(SkillDefinition skill, out AreaShape shape)
+        {
+            switch (skill.targetType)
+            {
+                case TargetType.AreaCircle:
+                    shape = AreaShape.Circle(skill.aoeSize > 0f ? skill.aoeSize : DefaultAoeRadius);
+                    return true;
+
+                case TargetType.AreaCone:
+                    shape = AreaShape.Cone(skill.aoeSize > 0f ? skill.aoeSize : DefaultConeLength,
+                        skill.aoeAngle > 0f ? skill.aoeAngle : DefaultConeAngle);
+                    return true;
+
+                case TargetType.AreaLine:
+                    shape = AreaShape.Line(skill.aoeSize > 0f ? skill.aoeSize : DefaultLineLength,
+                        skill.aoeWidth > 0f ? skill.aoeWidth : DefaultLineWidth);
+                    return true;
+
+                default:
+                    shape = default;
+                    return false;
+            }
+        }
+
+        /// <summary>Where an area skill is anchored and which way it faces, given the caster and the point being aimed at.</summary>
+        public static void GetAreaFrame(SkillDefinition skill, Vector3 userPosition, Vector3 aimPosition, out Vector3 origin, out Vector3 forward)
+        {
+            forward = aimPosition - userPosition;
+            forward.y = 0f;
+            forward = forward.sqrMagnitude > 1e-6f ? forward.normalized : Vector3.forward;
+            origin = skill.targetType == TargetType.AreaCircle ? aimPosition : userPosition;
         }
 
         /// <summary>

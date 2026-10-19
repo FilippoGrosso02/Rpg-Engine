@@ -13,6 +13,17 @@ namespace Game.Data.Definitions
         public TargetType targetType;
         public int range;
 
+        // --- Area of effect (used when targetType is AreaCircle / AreaCone / AreaLine; 0 = use the default) ---
+
+        /// <summary>Circle: radius (default 3.5). Cone / Line: length from the caster (defaults 6 / 8).</summary>
+        public float aoeSize;
+
+        /// <summary>Cone only: full opening angle in degrees (default 90).</summary>
+        public float aoeAngle;
+
+        /// <summary>Line only: full width (default 2).</summary>
+        public float aoeWidth;
+
         public int resourceCost; // MP — legacy, unread by Duelwright combat (AP replaces it as the combat resource)
 
         public int power; // legacy, unread by Duelwright combat — see the fields below instead
@@ -63,5 +74,11 @@ namespace Game.Data.Definitions
         /// to <see cref="reviveHp"/> HP with fear and statuses cleared. They act again from the next round.</summary>
         public bool isRevive;
         public int reviveHp = 1;
+
+        // --- Animation ---
+
+        /// <summary>Custom animation for this skill. Empty clip = fall back to the user's
+        /// AnimationSet (basic attacks use the weapon's / set's basic-attack list instead).</summary>
+        public AnimationAction animation = new AnimationAction();
     }
 }

@@ -8,6 +8,7 @@ namespace Game.Data.Definitions
     {
         public Sprite portrait;
         public GameObject battleModelPrefab;
+        public AnimationSetDefinition animationSet;
 
         public string classId;
 

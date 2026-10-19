@@ -128,6 +128,95 @@ namespace Game.Combat.Tests.EditMode
         }
 
         [Test]
+        public void ResolveTargets_AreaCircleSkill_UsesTheSkillsOwnRadius()
+        {
+            var skill = ScriptableObject.CreateInstance<SkillDefinition>();
+            skill.targetType = TargetType.AreaCircle;
+            skill.aoeSize = 8f;
+
+            var user = MakeCombatant(true, 5, 0, Vector3.zero);
+            var target = MakeCombatant(false, 0, 0, new Vector3(0f, 0f, 10f));
+            var edgeEnemy = MakeCombatant(false, 0, 0, new Vector3(6f, 0f, 10f));   // 6 from the target: inside radius 8, outside the default 3.5
+            var tooFar = MakeCombatant(false, 0, 0, new Vector3(9f, 0f, 10f));
+
+            var targets = ActionResolver.ResolveTargets(skill, user, target, new List<CombatantRuntime> { user, target, edgeEnemy, tooFar });
+
+            Assert.Contains(edgeEnemy, targets);
+            Assert.IsFalse(targets.Contains(tooFar));
+
+            Object.DestroyImmediate(skill);
+        }
+
+        [Test]
+        public void ResolveTargets_AreaConeSkill_HitsEnemiesInTheWedgeFromTheCasterTowardsTheTarget()
+        {
+            var skill = ScriptableObject.CreateInstance<SkillDefinition>();
+            skill.targetType = TargetType.AreaCone;
+            skill.aoeSize = 8f;
+            skill.aoeAngle = 60f;
+
+            var user = MakeCombatant(true, 5, 0, Vector3.zero);
+            var target = MakeCombatant(false, 0, 0, new Vector3(0f, 0f, 5f));
+            var inWedge = MakeCombatant(false, 0, 0, new Vector3(1.5f, 0f, 7f));
+            var offToTheSide = MakeCombatant(false, 0, 0, new Vector3(6f, 0f, 3f));
+            var behind = MakeCombatant(false, 0, 0, new Vector3(0f, 0f, -3f));
+            var beyondLength = MakeCombatant(false, 0, 0, new Vector3(0f, 0f, 9f));
+
+            var all = new List<CombatantRuntime> { user, target, inWedge, offToTheSide, behind, beyondLength };
+            var targets = ActionResolver.ResolveTargets(skill, user, target, all);
+
+            Assert.Contains(target, targets);
+            Assert.Contains(inWedge, targets);
+            Assert.IsFalse(targets.Contains(offToTheSide));
+            Assert.IsFalse(targets.Contains(behind));
+            Assert.IsFalse(targets.Contains(beyondLength));
+
+            Object.DestroyImmediate(skill);
+        }
+
+        [Test]
+        public void ResolveTargets_AreaLineSkill_HitsEnemiesInTheStripBetweenCasterAndBeyond()
+        {
+            var skill = ScriptableObject.CreateInstance<SkillDefinition>();
+            skill.targetType = TargetType.AreaLine;
+            skill.aoeSize = 10f;
+            skill.aoeWidth = 2f;
+
+            var user = MakeCombatant(true, 5, 0, Vector3.zero);
+            var target = MakeCombatant(false, 0, 0, new Vector3(4f, 0f, 0f)); // line points along +X
+            var behindTarget = MakeCombatant(false, 0, 0, new Vector3(9f, 0.2f, 0.5f));
+            var tooWide = MakeCombatant(false, 0, 0, new Vector3(5f, 0f, 2f));
+
+            var targets = ActionResolver.ResolveTargets(skill, user, target, new List<CombatantRuntime> { user, target, behindTarget, tooWide });
+
+            Assert.Contains(target, targets);
+            Assert.Contains(behindTarget, targets);
+            Assert.IsFalse(targets.Contains(tooWide));
+
+            Object.DestroyImmediate(skill);
+        }
+
+        [Test]
+        public void TryGetAreaShape_FallsBackToDefaultsAndRejectsNonAreaSkills()
+        {
+            var skill = ScriptableObject.CreateInstance<SkillDefinition>();
+
+            skill.targetType = TargetType.AreaCircle;
+            Assert.IsTrue(ActionResolver.TryGetAreaShape(skill, out var circle));
+            Assert.AreEqual(ActionResolver.DefaultAoeRadius, circle.range);
+
+            skill.targetType = TargetType.AreaCone;
+            Assert.IsTrue(ActionResolver.TryGetAreaShape(skill, out var cone));
+            Assert.AreEqual(ActionResolver.DefaultConeLength, cone.range);
+            Assert.AreEqual(ActionResolver.DefaultConeAngle, cone.angle);
+
+            skill.targetType = TargetType.SingleEnemy;
+            Assert.IsFalse(ActionResolver.TryGetAreaShape(skill, out _));
+
+            Object.DestroyImmediate(skill);
+        }
+
+        [Test]
         public void ResolveTargets_SingleEnemySkill_ReturnsOnlyThePrimaryTarget()
         {
             var skill = ScriptableObject.CreateInstance<SkillDefinition>();

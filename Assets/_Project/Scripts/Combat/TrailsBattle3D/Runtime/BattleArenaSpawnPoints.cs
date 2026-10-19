@@ -8,7 +8,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
     /// </summary>
     public class BattleArenaSpawnPoints : MonoBehaviour
     {
-        [Tooltip("Up to 3 slots, front-to-back or left-to-right — party formation.")]
+        [Tooltip("Up to 5 slots (matches PartyRoster.AbsoluteMaxSize) — party formation: a front row of 3, then two behind.")]
         public Transform[] partySpawnPoints;
 
         [Tooltip("Up to 4 slots — enemy formation.")]

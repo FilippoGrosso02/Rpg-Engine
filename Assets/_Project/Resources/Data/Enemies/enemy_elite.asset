@@ -15,7 +15,8 @@ MonoBehaviour:
   id: enemy_elite
   displayName: Elite
   sprite: {fileID: 0}
-  battleModelPrefab: {fileID: 4512916267656287747, guid: 46ea42103a7c38a40be3bc2c45cde89a, type: 3}
+  battleModelPrefab: {fileID: 5149439084821441074, guid: e67e786c86024754891863b90aa8a459, type: 3}
+  animationSet: {fileID: 11400000, guid: 18cb63096f4bb1b468bd357639bb7112, type: 2}
   hp: 22
   atk: 6
   def: 6

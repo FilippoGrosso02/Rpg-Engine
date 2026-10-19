@@ -28,6 +28,11 @@ namespace Game.Overworld
 
             GUILayout.BeginArea(new Rect(10, 10, 340, Screen.height - 20), GUI.skin.box);
             GUILayout.Label($"Party roster  {PartyRoster.Count}/{PartyRoster.MaxSize}   (F2 to close)");
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"Max party size: {PartyRoster.MaxSize} (limit {PartyRoster.AbsoluteMaxSize})");
+            if (GUILayout.Button("-", GUILayout.Width(30))) PartyRoster.SetMaxSize(PartyRoster.MaxSize - 1);
+            if (GUILayout.Button("+", GUILayout.Width(30))) PartyRoster.SetMaxSize(PartyRoster.MaxSize + 1);
+            GUILayout.EndHorizontal();
             _scroll = GUILayout.BeginScrollView(_scroll);
 
             foreach (var actor in DatabaseRegistry.GetAllActors().OrderBy(a => a.displayName))

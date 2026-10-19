@@ -5,6 +5,7 @@
         "Game.Data",
         "Game.Combat.Contracts",
         "Game.Combat.TrailsBattle3D",
+        "Game.Common",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

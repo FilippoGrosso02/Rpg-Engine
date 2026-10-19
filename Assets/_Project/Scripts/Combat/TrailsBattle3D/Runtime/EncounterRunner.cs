@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Game.Combat.Contracts;
+using Game.Common.Area;
 using Game.Data.Definitions;
 using Game.Data.Enums;
 using Game.Data.Registry;
@@ -25,6 +26,12 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         private const string BattleSceneName = "BattleArena_01";
         private const int MaxTurns = 500;
         private const float MoveSpeed = 6f;
+        private const float MaxReactionWait = 0.6f;
+        private const float DefeatWait = 0.9f;
+        private const float DefeatHideDelay = 0.8f;
+
+        private readonly Dictionary<CombatantRuntime, List<AnimationAction>> _weaponAttackAnimations = new Dictionary<CombatantRuntime, List<AnimationAction>>();
+        private readonly HashSet<CombatantRuntime> _dyingViews = new HashSet<CombatantRuntime>();
         private const int TurnOrderPreviewCount = 6;
 
         [Tooltip("Both sides use 'attack nearest' AI — set by the PlayMode smoke test to run headless.")]
@@ -60,7 +67,9 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         private PlayerCommand? _pendingCommand;
         private SkillDefinition _pendingSkill;
         private bool _resultAcknowledged;
-        private MovementRangeRing _movementRangeRing;
+        private AreaIndicator _movementArea;
+        private AreaIndicator _attackRangeArea;
+        private AreaIndicator _aoeArea;
         private HoverHighlightRing _hoverHighlightRing;
         private MovementPathPreview _movementPathPreview;
         private Vector3 _turnStartPosition;
@@ -155,6 +164,8 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
             _combatants = new List<CombatantRuntime>();
             _views = new Dictionary<CombatantRuntime, GameObject>();
+            _dyingViews.Clear();
+            _weaponAttackAnimations.Clear();
 
             SpawnParty(ResolvePartyIds(_encounter));
             SpawnEnemies(_encounter.enemyIds);
@@ -312,7 +323,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 }
             }
 
-            ExecuteSkill(actor, skill, target);
+            yield return PerformSkill(actor, skill, target);
         }
 
         /// <summary>Actual attack distance in world units: attackRangeMultiplier * RangeUnit.
@@ -422,15 +433,17 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             _pendingCommand = null;
             _pendingSkill = null;
 
-            EnsureMovementRangeRing();
+            EnsureRangeAreas();
             EnsureHoverVisuals();
-            _movementRangeRing.ShowAt(_turnStartPosition, actor.moveRange);
+            _movementArea.ShowCircle(_turnStartPosition, actor.moveRange);
 
             var targeting = GetComponent<TargetingInput>();
 
             while (true)
             {
                 UpdateHoverPreview(actor, targeting);
+                UpdateAttackRangeArea(actor, targeting);
+                UpdateAoePreview(actor, targeting);
 
                 if (_pendingCommand == PlayerCommand.Guard)
                 {
@@ -454,7 +467,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                             yield return MoveWithinRange(actor, ally.position, allyRange);
                             if (Vector3.Distance(actor.position, ally.position) <= allyRange + 0.1f)
                             {
-                                ExecuteSkill(actor, allySkill, ally);
+                                yield return PerformSkill(actor, allySkill, ally);
                                 break;
                             }
                         }
@@ -481,7 +494,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
                             if (canAct)
                             {
-                                ExecuteSkill(actor, skillToUse, view.Runtime);
+                                yield return PerformSkill(actor, skillToUse, view.Runtime);
                                 break;
                             }
                         }
@@ -501,7 +514,9 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 yield return null;
             }
 
-            _movementRangeRing.Hide();
+            _movementArea.Hide();
+            _attackRangeArea.Hide();
+            _aoeArea.Hide();
             _hoverHighlightRing.Hide();
             _movementPathPreview.Hide();
 
@@ -628,6 +643,10 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 waypoints = new[] { actor.position, destination };
             }
 
+            _views.TryGetValue(actor, out var moveView);
+            var moveAnimator = moveView != null ? moveView.GetComponent<CombatantAnimator>() : null;
+            moveAnimator?.SetSpeed(1f);
+
             for (int i = 1; i < waypoints.Length; i++)
             {
                 var from = waypoints[i - 1];
@@ -640,18 +659,27 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
                 var duration = segmentDistance / MoveSpeed;
                 var elapsed = 0f;
+                var flat = new Vector3(to.x - from.x, 0f, to.z - from.z);
+                var facing = flat.sqrMagnitude > 0.0001f ? Quaternion.LookRotation(flat) : (Quaternion?)null;
 
                 while (elapsed < duration)
                 {
                     elapsed += Time.deltaTime;
                     actor.position = Vector3.Lerp(from, to, Mathf.Clamp01(elapsed / duration));
                     SyncViewPosition(actor);
+                    if (facing.HasValue && moveView != null)
+                    {
+                        moveView.transform.rotation = Quaternion.RotateTowards(
+                            moveView.transform.rotation, facing.Value, 720f * Time.deltaTime);
+                    }
                     yield return null;
                 }
 
                 actor.position = to;
                 SyncViewPosition(actor);
             }
+
+            moveAnimator?.SetSpeed(0f);
         }
 
         /// <summary>
@@ -683,16 +711,90 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             }
         }
 
-        private void EnsureMovementRangeRing()
+        private void EnsureRangeAreas()
         {
-            if (_movementRangeRing != null)
+            // Range areas (reach, not impact): very light fill and a dashed edge, so they read as "you could go/hit here".
+            if (_movementArea == null)
             {
-                return;
+                _movementArea = CreateAreaIndicator("MovementRangeArea", new Color(0.3f, 0.9f, 1f), fillAlpha: 0.05f, edgeAlpha: 0.8f, dashed: true);
             }
 
-            var ringObject = new GameObject("MovementRangeRing");
-            SceneManager.MoveGameObjectToScene(ringObject, _battleScene);
-            _movementRangeRing = ringObject.AddComponent<MovementRangeRing>();
+            if (_attackRangeArea == null)
+            {
+                _attackRangeArea = CreateAreaIndicator("AttackRangeArea", new Color(1f, 0.35f, 0.25f), fillAlpha: 0.05f, edgeAlpha: 0.8f, dashed: true);
+            }
+
+            // Area-of-effect preview (impact): stronger fill and a solid edge.
+            if (_aoeArea == null)
+            {
+                _aoeArea = CreateAreaIndicator("AoePreviewArea", new Color(1f, 0.75f, 0.2f), fillAlpha: 0.22f, edgeAlpha: 0.95f, dashed: false);
+            }
+        }
+
+        private AreaIndicator CreateAreaIndicator(string objectName, Color color, float fillAlpha, float edgeAlpha, bool dashed)
+        {
+            var areaObject = new GameObject(objectName);
+            SceneManager.MoveGameObjectToScene(areaObject, _battleScene);
+            var area = areaObject.AddComponent<AreaIndicator>();
+            area.fillColor = new Color(color.r, color.g, color.b, fillAlpha);
+            area.edgeColor = new Color(color.r, color.g, color.b, edgeAlpha);
+            if (dashed)
+            {
+                area.edgeWidth = 0.07f;
+                area.dashLength = 0.45f;
+                area.dashGap = 0.3f;
+            }
+
+            return area;
+        }
+
+        /// <summary>
+        /// While an area skill is selected and an enemy is hovered, shows exactly the shape that skill would hit
+        /// (a circle on the target, or a cone / line from the caster towards it).
+        /// </summary>
+        private void UpdateAoePreview(CombatantRuntime actor, TargetingInput targeting)
+        {
+            if (_pendingSkill != null
+                && targeting != null
+                && ActionResolver.TryGetAreaShape(_pendingSkill, out var shape)
+                && targeting.TryRaycastCombatant(out var view)
+                && view.Runtime != null
+                && !view.Runtime.IsDefeated
+                && view.Runtime.isPlayerSide != actor.isPlayerSide)
+            {
+                ActionResolver.GetAreaFrame(_pendingSkill, actor.position, view.Runtime.position, out var origin, out var forward);
+                _aoeArea.shape = shape;
+                _aoeArea.Show(origin, forward);
+            }
+            else
+            {
+                _aoeArea.Hide();
+            }
+        }
+
+        /// <summary>Red range circle around the acting unit while an attack is selected or an enemy is hovered, so reach is visible before committing.</summary>
+        private void UpdateAttackRangeArea(CombatantRuntime actor, TargetingInput targeting)
+        {
+            bool show = _pendingSkill != null && !IsAllyTargetedSkill(_pendingSkill);
+
+            if (!show
+                && targeting != null
+                && targeting.TryRaycastCombatant(out var hoveredView)
+                && hoveredView.Runtime != null
+                && !hoveredView.Runtime.IsDefeated
+                && hoveredView.Runtime.isPlayerSide != actor.isPlayerSide)
+            {
+                show = true;
+            }
+
+            if (show)
+            {
+                _attackRangeArea.ShowCircle(actor.position, AttackRangeFor(actor));
+            }
+            else
+            {
+                _attackRangeArea.Hide();
+            }
         }
 
         private void EnsureHoverVisuals()
@@ -717,6 +819,116 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             if (_views.TryGetValue(combatant, out var view) && view != null)
             {
                 view.transform.position = combatant.position;
+            }
+        }
+
+        /// <summary>
+        /// Plays the user's attack/skill animation, applies the skill's effects at the clip's
+        /// impact moment, then plays hit / defeat reactions on whoever lost HP. Rules resolve in
+        /// <see cref="ExecuteSkill"/> exactly as before - this only decides *when*. Missing clips
+        /// degrade to an immediate resolve, so a turn can never stall on animation data.
+        /// </summary>
+        private IEnumerator PerformSkill(CombatantRuntime actor, SkillDefinition skill, CombatantRuntime primaryTarget)
+        {
+            var animator = GetAnimator(actor);
+            var action = animator != null ? ResolveActionAnimation(actor, animator, skill) : null;
+
+            if (primaryTarget != null && primaryTarget != actor)
+            {
+                yield return FaceTowards(actor, primaryTarget.position);
+            }
+
+            float duration = 0f;
+            float impact = 0f;
+            if (action != null && action.HasClip)
+            {
+                duration = animator.Play(action);
+                impact = Mathf.Min(action.ImpactTime, duration);
+                if (impact > 0f)
+                {
+                    yield return new WaitForSeconds(impact);
+                }
+            }
+
+            var hpBefore = new Dictionary<CombatantRuntime, int>();
+            foreach (var c in _combatants)
+            {
+                hpBefore[c] = c.currentHp;
+            }
+
+            ExecuteSkill(actor, skill, primaryTarget);
+
+            float reactionWait = 0f;
+            foreach (var c in _combatants)
+            {
+                if (c.currentHp >= hpBefore[c] || c.IsDefeated)
+                {
+                    continue; // defeat animation is started by SyncViewVisibility
+                }
+
+                var targetAnimator = GetAnimator(c);
+                if (targetAnimator != null)
+                {
+                    reactionWait = Mathf.Max(reactionWait, Mathf.Min(targetAnimator.PlayHit(), MaxReactionWait));
+                }
+            }
+
+            if (_dyingViews.Count > 0)
+            {
+                reactionWait = Mathf.Max(reactionWait, DefeatWait);
+            }
+
+            var wait = Mathf.Max(duration - impact, reactionWait);
+            if (wait > 0f)
+            {
+                yield return new WaitForSeconds(wait);
+            }
+        }
+
+        private CombatantAnimator GetAnimator(CombatantRuntime combatant)
+        {
+            return _views.TryGetValue(combatant, out var view) && view != null
+                ? view.GetComponent<CombatantAnimator>()
+                : null;
+        }
+
+        /// <summary>Skill clip first; Basic Attack then falls to the weapon's list and the set's
+        /// combo, any other skill to the set's default skill animation.</summary>
+        private AnimationAction ResolveActionAnimation(CombatantRuntime actor, CombatantAnimator animator, SkillDefinition skill)
+        {
+            if (skill.animation != null && skill.animation.HasClip)
+            {
+                return skill.animation;
+            }
+
+            bool isBasic = actor.skillIds.Count > 0 && skill.id == actor.skillIds[0];
+            if (isBasic)
+            {
+                _weaponAttackAnimations.TryGetValue(actor, out var weaponClips);
+                return animator.NextBasicAttack(weaponClips);
+            }
+
+            return animator.Set != null ? animator.Set.skillDefault : null;
+        }
+
+        private IEnumerator FaceTowards(CombatantRuntime actor, Vector3 worldPoint)
+        {
+            if (!_views.TryGetValue(actor, out var view) || view == null)
+            {
+                yield break;
+            }
+
+            var flat = new Vector3(worldPoint.x - actor.position.x, 0f, worldPoint.z - actor.position.z);
+            if (flat.sqrMagnitude < 0.0001f)
+            {
+                yield break;
+            }
+
+            var goal = Quaternion.LookRotation(flat);
+            while (view != null && Quaternion.Angle(view.transform.rotation, goal) > 1f)
+            {
+                view.transform.rotation = Quaternion.RotateTowards(view.transform.rotation, goal, 720f * Time.deltaTime);
+                yield return null;
             }
         }
 
@@ -844,10 +1056,51 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         /// </summary>
         private void SyncViewVisibility(CombatantRuntime combatant)
         {
-            if (_views.TryGetValue(combatant, out var view) && view != null)
+            if (!_views.TryGetValue(combatant, out var view) || view == null)
             {
-                view.SetActive(!combatant.IsDefeated);
+                return;
             }
+
+            var animator = view.GetComponent<CombatantAnimator>();
+
+            if (!combatant.IsDefeated)
+            {
+                _dyingViews.Remove(combatant);
+                if (!view.activeSelf)
+                {
+                    view.SetActive(true);
+                }
+
+                animator?.ClearAction();
+                return;
+            }
+
+            if (!view.activeSelf || !_dyingViews.Add(combatant))
+            {
+                return;
+            }
+
+            // Play the fall, hold the pose briefly, then hide (the body is kept for revives).
+            if (animator != null && animator.PlayDefeated() > 0f)
+            {
+                StartCoroutine(HideAfterDefeat(combatant, view));
+            }
+            else
+            {
+                _dyingViews.Remove(combatant);
+                view.SetActive(false);
+            }
+        }
+
+        private IEnumerator HideAfterDefeat(CombatantRuntime combatant, GameObject view)
+        {
+            yield return new WaitForSeconds(DefeatHideDelay + DefeatWait);
+            if (view != null && combatant.IsDefeated)
+            {
+                view.SetActive(false);
+            }
+
+            _dyingViews.Remove(combatant);
         }
 
         private void RaiseTurnOrderChanged()
@@ -886,7 +1139,16 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 runtime.position = spawnPoint != null ? spawnPoint.position : new Vector3(-i * 2f, 0f, -3f);
 
                 _combatants.Add(runtime);
-                SpawnView(actorDef.battleModelPrefab, runtime);
+                if (!string.IsNullOrEmpty(actorDef.startingWeaponId))
+                {
+                    var weapon = DatabaseRegistry.GetWeapon(actorDef.startingWeaponId);
+                    if (weapon != null && weapon.basicAttackAnimations != null && weapon.basicAttackAnimations.Count > 0)
+                    {
+                        _weaponAttackAnimations[runtime] = weapon.basicAttackAnimations;
+                    }
+                }
+
+                SpawnView(actorDef.battleModelPrefab, runtime, actorDef.animationSet);
             }
         }
 
@@ -905,7 +1167,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 runtime.position = spawnPoint != null ? spawnPoint.position : new Vector3(-i * 2f, 0f, 3f);
 
                 _combatants.Add(runtime);
-                SpawnView(enemyDef.battleModelPrefab, runtime);
+                SpawnView(enemyDef.battleModelPrefab, runtime, enemyDef.animationSet);
             }
         }
 
@@ -983,7 +1245,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             };
         }
 
-        private void SpawnView(GameObject prefab, CombatantRuntime runtime)
+        private void SpawnView(GameObject prefab, CombatantRuntime runtime, AnimationSetDefinition animationSet)
         {
             if (prefab == null)
             {
@@ -1002,6 +1264,15 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
             view.Runtime = runtime;
             runtime.viewTransform = instance.transform;
+
+            var animator = instance.GetComponent<CombatantAnimator>();
+            if (animator == null)
+            {
+                animator = instance.AddComponent<CombatantAnimator>();
+            }
+
+            animator.Initialize(animationSet);
+            instance.transform.rotation = Quaternion.LookRotation(runtime.isPlayerSide ? Vector3.forward : Vector3.back);
             _views[runtime] = instance;
 
             AddHoverHitbox(instance);

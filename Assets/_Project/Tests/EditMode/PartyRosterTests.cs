@@ -17,7 +17,7 @@ namespace Game.Data.Tests.EditMode
         {
             DatabaseRegistry.Initialize();
             _ids = DatabaseRegistry.GetAllActors().Select(a => a.id).ToArray();
-            Assert.GreaterOrEqual(_ids.Length, 4, "These tests need at least 4 heroes in the database.");
+            Assert.GreaterOrEqual(_ids.Length, 6, "These tests need at least 6 heroes in the database.");
             PartyRoster.Reset(null);
         }
 
@@ -49,6 +49,55 @@ namespace Game.Data.Tests.EditMode
             LogAssert.Expect(LogType.Warning, "PartyRoster: no hero with id 'nobody' in the database.");
             Assert.IsFalse(PartyRoster.Add("nobody"));
             Assert.AreEqual(0, PartyRoster.Count);
+        }
+
+        [Test]
+        public void SetMaxSize_ControlsTheLimit_ButNeverBeyondTheHardCeiling()
+        {
+            PartyRoster.SetMaxSize(2);
+            Assert.AreEqual(2, PartyRoster.MaxSize);
+            Assert.IsTrue(PartyRoster.Add(_ids[0]));
+            Assert.IsTrue(PartyRoster.Add(_ids[1]));
+            Assert.IsFalse(PartyRoster.Add(_ids[2]));
+
+            PartyRoster.SetMaxSize(99);
+            Assert.AreEqual(PartyRoster.AbsoluteMaxSize, PartyRoster.MaxSize);
+            Assert.AreEqual(5, PartyRoster.AbsoluteMaxSize);
+
+            PartyRoster.SetMaxSize(0);
+            Assert.AreEqual(1, PartyRoster.MaxSize);
+        }
+
+        [Test]
+        public void FivePartyMembers_FitWhenTheLimitIsFive()
+        {
+            PartyRoster.SetMaxSize(5);
+            for (int i = 0; i < 5; i++) Assert.IsTrue(PartyRoster.Add(_ids[i]), $"member {i}");
+            Assert.IsFalse(PartyRoster.Add(_ids[5]));
+        }
+
+        [Test]
+        public void LoweringTheLimit_DropsMembersFromTheEnd()
+        {
+            PartyRoster.SetMaxSize(4);
+            for (int i = 0; i < 4; i++) PartyRoster.Add(_ids[i]);
+
+            PartyRoster.SetMaxSize(2);
+
+            CollectionAssert.AreEqual(new[] { _ids[0], _ids[1] }, PartyRoster.Members);
+        }
+
+        [Test]
+        public void Reset_AppliesTheMaxPartySizeFromTheAsset()
+        {
+            var def = ScriptableObject.CreateInstance<PartyRosterDefinition>();
+            def.maxPartySize = 5;
+            for (int i = 0; i < 4; i++) def.startingMembers.Add(DatabaseRegistry.GetActor(_ids[i]));
+
+            PartyRoster.Reset(def);
+
+            Assert.AreEqual(5, PartyRoster.MaxSize);
+            Assert.AreEqual(4, PartyRoster.Count);
         }
 
         [Test]

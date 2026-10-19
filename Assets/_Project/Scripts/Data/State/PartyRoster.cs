@@ -13,8 +13,16 @@ namespace Game.Data.State
     /// </summary>
     public static class PartyRoster
     {
-        /// <summary>The battle arena has three party spawn points, so more than this would overlap on screen.</summary>
-        public const int MaxSize = 3;
+        /// <summary>Hard ceiling: the battle arena has five party spawn points, so more than this would overlap on screen.</summary>
+        public const int AbsoluteMaxSize = 5;
+
+        /// <summary>Party size limit used when no roster asset says otherwise.</summary>
+        public const int DefaultMaxSize = 3;
+
+        static int s_maxSize = DefaultMaxSize;
+
+        /// <summary>The current party size limit (1 to <see cref="AbsoluteMaxSize"/>). Change it with <see cref="SetMaxSize"/>.</summary>
+        public static int MaxSize => s_maxSize;
 
         static readonly List<string> Ids = new List<string>();
         static bool s_initialized;
@@ -42,6 +50,7 @@ namespace Game.Data.State
         {
             s_initialized = true;
             Ids.Clear();
+            s_maxSize = startingRoster != null ? ClampMaxSize(startingRoster.maxPartySize) : DefaultMaxSize;
 
             if (startingRoster != null)
             {
@@ -56,6 +65,23 @@ namespace Game.Data.State
 
             Changed?.Invoke();
         }
+
+        /// <summary>
+        /// Sets how many heroes the party may hold, clamped to 1..<see cref="AbsoluteMaxSize"/>. If the party is already bigger,
+        /// the members at the end of the order are dropped (their remembered HP is kept).
+        /// </summary>
+        public static void SetMaxSize(int maxSize)
+        {
+            s_maxSize = ClampMaxSize(maxSize);
+            if (Ids.Count > s_maxSize)
+            {
+                Ids.RemoveRange(s_maxSize, Ids.Count - s_maxSize);
+            }
+
+            Changed?.Invoke();
+        }
+
+        static int ClampMaxSize(int maxSize) => Mathf.Clamp(maxSize, 1, AbsoluteMaxSize);
 
         /// <summary>Adds a hero from the database to the end of the party. False if the id is unknown, already in the party, or the party is full.</summary>
         public static bool Add(string actorId)
@@ -84,7 +110,7 @@ namespace Game.Data.State
 
         static bool TryAddInternal(string actorId)
         {
-            if (string.IsNullOrEmpty(actorId) || Ids.Count >= MaxSize || Ids.Contains(actorId))
+            if (string.IsNullOrEmpty(actorId) || Ids.Count >= s_maxSize || Ids.Contains(actorId))
             {
                 return false;
             }
@@ -104,6 +130,7 @@ namespace Game.Data.State
         {
             Ids.Clear();
             s_initialized = false;
+            s_maxSize = DefaultMaxSize;
             Changed = null;
         }
     }

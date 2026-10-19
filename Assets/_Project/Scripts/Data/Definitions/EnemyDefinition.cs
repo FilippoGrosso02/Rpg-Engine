@@ -9,6 +9,7 @@ namespace Game.Data.Definitions
     {
         public Sprite sprite;
         public GameObject battleModelPrefab;
+        public AnimationSetDefinition animationSet;
 
         public int hp;
         public int atk;

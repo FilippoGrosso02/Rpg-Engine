@@ -11,6 +11,9 @@ namespace Game.Data.Definitions
     [CreateAssetMenu(fileName = "PartyRoster", menuName = "Database/Party Roster")]
     public class PartyRosterDefinition : ScriptableObject
     {
+        [Tooltip("How many heroes the party can hold (1-5). Can also be changed at runtime with PartyRoster.SetMaxSize.")]
+        [Range(1, 5)] public int maxPartySize = 3;
+
         public List<ActorDefinition> startingMembers = new List<ActorDefinition>();
     }
 }
