@@ -96,6 +96,20 @@ namespace Game.Data.State
             return true;
         }
 
+        /// <summary>Moves the first party member to the back, making the next one the leader (and so the visible overworld model). No-op with fewer than two members.</summary>
+        public static void CycleLeader()
+        {
+            if (Ids.Count < 2)
+            {
+                return;
+            }
+
+            var first = Ids[0];
+            Ids.RemoveAt(0);
+            Ids.Add(first);
+            Changed?.Invoke();
+        }
+
         /// <summary>Removes a hero from the party. False if they weren't in it. Their remembered HP is kept for if they rejoin.</summary>
         public static bool Remove(string actorId)
         {

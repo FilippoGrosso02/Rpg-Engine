@@ -3,6 +3,7 @@
     "rootNamespace": "",
     "references": [
         "Game.Data",
+        "Game.Common",
         "Game.Combat.Contracts",
         "Game.Services"
     ],

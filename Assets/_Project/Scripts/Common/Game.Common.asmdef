@@ -1,7 +1,9 @@
 {
     "name": "Game.Common",
     "rootNamespace": "",
-    "references": [],
+    "references": [
+        "Game.Data"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

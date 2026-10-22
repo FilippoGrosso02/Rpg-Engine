@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.Animations;
 using UnityEngine.Playables;
 
-namespace Game.Combat.TrailsBattle3D.Runtime
+namespace Game.Common
 {
     /// <summary>
     /// Plays arbitrary AnimationClips on a combatant's model through a PlayableGraph, so no

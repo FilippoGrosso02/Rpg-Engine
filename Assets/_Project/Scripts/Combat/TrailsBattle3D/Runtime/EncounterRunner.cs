@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Game.Combat.Contracts;
+using Game.Common;
 using Game.Common.Area;
 using Game.Data.Definitions;
 using Game.Data.Enums;
