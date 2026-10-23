@@ -15,19 +15,21 @@ MonoBehaviour:
   id: actor_test_hero
   displayName: Test Hero
   portrait: {fileID: 0}
-  battleModelPrefab: {fileID: 5149439084821441074, guid: e67e786c86024754891863b90aa8a459, type: 3}
+  battleModelPrefab: {fileID: 4141831781153176045, guid: 7e03e121002c1ab4e98a59115a9ecfbf, type: 3}
   animationSet: {fileID: 11400000, guid: 0f70efe80fbb776498dd596a49cb0334, type: 2}
   classId: class_test_warrior
-  baseHp: 20
-  baseMp: 10
-  baseAtk: 5
-  baseDef: 5
-  baseSpeed: 5
+  strength: 6
+  dexterity: 6
+  vitality: 6
+  mind: 6
+  charm: 6
+  level: 1
   moveRange: 6
   attackRangeMultiplier: 1
+  usesAp: 0
   roleLabel: 
   startingSkillIds:
   - skill_test_strike
   - skill_test_aoe_burst
   startingWeaponId: weapon_test_sword
-  startingArmorId: armor_test_shield
+  startingArmorIds: []

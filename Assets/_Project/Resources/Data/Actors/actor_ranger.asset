@@ -15,7 +15,7 @@ MonoBehaviour:
   id: actor_ranger
   displayName: Ranger
   portrait: {fileID: 0}
-  battleModelPrefab: {fileID: 5149439084821441074, guid: e67e786c86024754891863b90aa8a459, type: 3}
+  battleModelPrefab: {fileID: 4440533481374886727, guid: de76c05b573741045829cfbddddfb642, type: 3}
   animationSet: {fileID: 11400000, guid: 0f70efe80fbb776498dd596a49cb0334, type: 2}
   classId: class_ranger
   strength: 7

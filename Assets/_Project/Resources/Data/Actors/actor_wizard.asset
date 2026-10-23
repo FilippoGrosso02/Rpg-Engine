@@ -15,7 +15,7 @@ MonoBehaviour:
   id: actor_wizard
   displayName: Wizard
   portrait: {fileID: 0}
-  battleModelPrefab: {fileID: 5149439084821441074, guid: e67e786c86024754891863b90aa8a459, type: 3}
+  battleModelPrefab: {fileID: 1757396823714094405, guid: 6169a22fb6a19e840b98fb7f73e8831f, type: 3}
   animationSet: {fileID: 11400000, guid: 0f70efe80fbb776498dd596a49cb0334, type: 2}
   classId: class_wizard
   strength: 4

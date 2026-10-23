@@ -10,7 +10,7 @@ namespace Game.EditorTools
 {
     /// <summary>
     /// Authors the d12 OSR roster from the "Template Heroes &amp; Monsters" sheet: 3 classes, the gear, the 3 spells and
-    /// the Web status, 3 heroes (Warrior, Ranger, Wizard) and 3 monsters (Goblin, Ogre, Slime). Re-runnable — every asset is
+    /// the Web status, 3 heroes (Warrior, Ranger, Wizard) and 3 monsters (Bandit, Archer, Witch; ids stay enemy_goblin/ogre/slime). Re-runnable — every asset is
     /// load-or-create and overwritten in place, so GUIDs (and anything referencing them) stay stable. It also repoints the existing
     /// encounter assets and the default party roster at the new content and removes the old Duelwright heroes, cards and monsters.
     /// Run via: Tools/Combat/Setup OSR Roster, or -executeMethod Game.EditorTools.OsrRosterSetup.Run
@@ -18,7 +18,9 @@ namespace Game.EditorTools
     public static class OsrRosterSetup
     {
         private const string Root = "Assets/_Project/Resources/Data";
-        private const string HeroModelPath = "Assets/_Project/Prefabs/Characters/Skeleton_Battle.prefab";
+        private const string ModelFolder = "Assets/_Project/Prefabs/Characters";
+
+        private static GameObject Model(string name) => AssetDatabase.LoadAssetAtPath<GameObject>($"{ModelFolder}/{name}.prefab");
         private const string HeroAnimPath = "Assets/_Project/Config/Animation/AnimSet_OneHandSword.asset";
         private const string EnemyAnimPath = "Assets/_Project/Config/Animation/AnimSet_Enemy.asset";
         private const string PartyRosterPath = "Assets/_Project/Config/PartyRoster_Default.asset";
@@ -47,12 +49,12 @@ namespace Game.EditorTools
                 EnsureFolder($"{Root}/{folder}");
             }
 
-            var heroModel = AssetDatabase.LoadAssetAtPath<GameObject>(HeroModelPath);
+            var heroModel = Model("Hero_Warrior");
             var heroAnim = AssetDatabase.LoadAssetAtPath<AnimationSetDefinition>(HeroAnimPath);
             var enemyAnim = AssetDatabase.LoadAssetAtPath<AnimationSetDefinition>(EnemyAnimPath);
             if (heroModel == null || heroAnim == null || enemyAnim == null)
             {
-                Debug.LogError("[OsrRosterSetup] Missing the skeleton model or animation sets — nothing changed.");
+                Debug.LogError("[OsrRosterSetup] Missing the Hero_Warrior model or animation sets — nothing changed.");
                 return;
             }
 
@@ -184,7 +186,7 @@ namespace Game.EditorTools
 
             var ranger = Create<ActorDefinition>("Actors", "actor_ranger", "Ranger", a =>
             {
-                Hero(a, heroModel, heroAnim, rangerClass, "Mobile archer", Bow);
+                Hero(a, Model("Hero_Ranger"), heroAnim, rangerClass, "Mobile archer", Bow);
                 a.strength = 7; a.dexterity = 10; a.vitality = 7; a.mind = 6; a.charm = 5;
                 a.startingWeaponId = shortbow.id;
                 a.startingArmorIds = new List<string> { leather.id };
@@ -193,7 +195,7 @@ namespace Game.EditorTools
 
             var wizard = Create<ActorDefinition>("Actors", "actor_wizard", "Wizard", a =>
             {
-                Hero(a, heroModel, heroAnim, wizardClass, "Fragile caster", Thrown);
+                Hero(a, Model("Hero_Wizard"), heroAnim, wizardClass, "Fragile caster", Thrown);
                 a.strength = 4; a.dexterity = 7; a.vitality = 7; a.mind = 10; a.charm = 7;
                 a.usesAp = true;
                 a.startingWeaponId = dagger.id;
@@ -217,23 +219,23 @@ namespace Game.EditorTools
             }
 
             // --- Monsters ---
-            var goblin = Create<EnemyDefinition>("Enemies", "enemy_goblin", "Goblin", e =>
+            var goblin = Create<EnemyDefinition>("Enemies", "enemy_goblin", "Bandit", e =>
             {
-                Monster(e, enemyAnim, basic, "Grunt");
+                Monster(e, Model("Enemy_Bandit"), enemyAnim, basic, "Grunt");
                 e.hp = 5; e.armorClass = 9; e.attackBonus = 5; e.damage = new DiceRoll(1, 6);
                 e.morale = 7; e.initiative = 7; e.saveBonus = 5;
             });
 
-            var ogre = Create<EnemyDefinition>("Enemies", "enemy_ogre", "Ogre", e =>
+            var ogre = Create<EnemyDefinition>("Enemies", "enemy_ogre", "Archer", e =>
             {
-                Monster(e, enemyAnim, basic, "Brute");
+                Monster(e, Model("Enemy_Archer"), enemyAnim, basic, "Brute");
                 e.hp = 22; e.armorClass = 13; e.attackBonus = 8; e.damage = new DiceRoll(2, 6);
                 e.morale = 9; e.initiative = 5; e.saveBonus = 7;
             });
 
-            var slime = Create<EnemyDefinition>("Enemies", "enemy_slime", "Slime", e =>
+            var slime = Create<EnemyDefinition>("Enemies", "enemy_slime", "Witch", e =>
             {
-                Monster(e, enemyAnim, basic, "Hazard");
+                Monster(e, Model("Enemy_Witch"), enemyAnim, basic, "Hazard");
                 e.hp = 14; e.armorClass = 7; e.attackBonus = 4; e.damage = new DiceRoll(1, 6);
                 e.morale = 0; // mindless: never checks morale
                 e.initiative = 3; e.saveBonus = 4;
@@ -253,7 +255,7 @@ namespace Game.EditorTools
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log("[OsrRosterSetup] OSR roster created: Warrior, Ranger, Wizard vs Goblin, Ogre, Slime.");
+            Debug.Log("[OsrRosterSetup] OSR roster created: Warrior, Ranger, Wizard vs Bandit, Archer, Witch.");
         }
 
         private static void Hero(ActorDefinition a, GameObject model, AnimationSetDefinition anim, ClassDefinition cls, string role, int rangeMultiplier)
@@ -268,9 +270,9 @@ namespace Game.EditorTools
             a.usesAp = false;
         }
 
-        private static void Monster(EnemyDefinition e, AnimationSetDefinition anim, SkillDefinition basic, string role)
+        private static void Monster(EnemyDefinition e, GameObject model, AnimationSetDefinition anim, SkillDefinition basic, string role)
         {
-            e.battleModelPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(HeroModelPath);
+            e.battleModelPrefab = model;
             e.animationSet = anim;
             e.moveRange = 6;
             e.attackRangeMultiplier = Melee;

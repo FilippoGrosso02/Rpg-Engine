@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: enemy_ogre
   m_EditorClassIdentifier: Game.Data::Game.Data.Definitions.EnemyDefinition
   id: enemy_ogre
-  displayName: Ogre
+  displayName: Archer
   sprite: {fileID: 0}
-  battleModelPrefab: {fileID: 5149439084821441074, guid: e67e786c86024754891863b90aa8a459, type: 3}
+  battleModelPrefab: {fileID: 7695955738425482828, guid: 3818a30cb8297a24f947ec04c8976f34, type: 3}
   animationSet: {fileID: 11400000, guid: 18cb63096f4bb1b468bd357639bb7112, type: 2}
   hp: 22
   armorClass: 13

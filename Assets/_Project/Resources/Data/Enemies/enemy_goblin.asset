@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: enemy_goblin
   m_EditorClassIdentifier: Game.Data::Game.Data.Definitions.EnemyDefinition
   id: enemy_goblin
-  displayName: Goblin
+  displayName: Bandit
   sprite: {fileID: 0}
-  battleModelPrefab: {fileID: 5149439084821441074, guid: e67e786c86024754891863b90aa8a459, type: 3}
+  battleModelPrefab: {fileID: 5830655489261427691, guid: c92e5bf9846ce444d8d923ec1e5e0e17, type: 3}
   animationSet: {fileID: 11400000, guid: 18cb63096f4bb1b468bd357639bb7112, type: 2}
   hp: 5
   armorClass: 9

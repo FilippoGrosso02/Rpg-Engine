@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: enemy_slime
   m_EditorClassIdentifier: Game.Data::Game.Data.Definitions.EnemyDefinition
   id: enemy_slime
-  displayName: Slime
+  displayName: Witch
   sprite: {fileID: 0}
-  battleModelPrefab: {fileID: 5149439084821441074, guid: e67e786c86024754891863b90aa8a459, type: 3}
+  battleModelPrefab: {fileID: 6898045402505149436, guid: 42c26187c13f4c54b98554c5a572d1cb, type: 3}
   animationSet: {fileID: 11400000, guid: 18cb63096f4bb1b468bd357639bb7112, type: 2}
   hp: 14
   armorClass: 7

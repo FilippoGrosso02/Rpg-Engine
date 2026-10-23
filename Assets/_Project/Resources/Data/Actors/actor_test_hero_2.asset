@@ -15,7 +15,7 @@ MonoBehaviour:
   id: actor_test_hero_2
   displayName: Test Hero 2
   portrait: {fileID: 0}
-  battleModelPrefab: {fileID: 5149439084821441074, guid: e67e786c86024754891863b90aa8a459, type: 3}
+  battleModelPrefab: {fileID: 4141831781153176045, guid: 7e03e121002c1ab4e98a59115a9ecfbf, type: 3}
   animationSet: {fileID: 11400000, guid: 0f70efe80fbb776498dd596a49cb0334, type: 2}
   classId: class_warrior
   strength: 10
