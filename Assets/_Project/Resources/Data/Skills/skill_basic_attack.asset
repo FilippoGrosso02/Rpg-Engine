@@ -13,25 +13,29 @@ MonoBehaviour:
   m_Name: skill_basic_attack
   m_EditorClassIdentifier: Game.Data::Game.Data.Definitions.SkillDefinition
   id: skill_basic_attack
-  displayName: Basic Attack
-  description: 
+  displayName: Attack
+  description: 'Attack with your weapon: d12 + attack against armor class.'
   icon: {fileID: 0}
   actionCost: 0
   targetType: 0
   range: 0
-  resourceCost: 0
-  power: 0
+  aoeSize: 0
+  aoeAngle: 0
+  aoeWidth: 0
   damageType: 0
+  apCost: 0
+  spellLevel: 0
+  usesWeaponDamage: 1
+  damage:
+    count: 0
+    sides: 0
+    bonus: 0
+  autoHit: 0
+  saveType: 0
+  halfDamageOnSave: 0
   statusEffectId: 
   statusEffectChance: 0
-  apCost: 0
-  skipDamage: 0
-  bonusPower: 0
-  ignoresDef: 0
-  skipDiceRoll: 0
-  extraDiceCount: 0
-  critThreshold: 0
-  selfDamage: 0
-  fearDelta: 0
-  isHeal: 0
-  healBonus: 0
+  animation:
+    clip: {fileID: 0}
+    impact: 0.5
+    speed: 1

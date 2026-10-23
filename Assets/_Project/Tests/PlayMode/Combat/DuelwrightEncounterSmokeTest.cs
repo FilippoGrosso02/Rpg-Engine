@@ -9,10 +9,10 @@ using UnityEngine.TestTools;
 namespace Game.Combat.Tests.PlayMode
 {
     /// <summary>
-    /// Runs the actual Duelwright roster (not the legacy Test Hero/Slime fixture) through a
-    /// full autopilot encounter — exercises the new SPD-ordered scheduler, AP economy, Fear
-    /// meter, melee/ranged gating, generic card effects, and every bespoke CardEffects
-    /// behavior an AI would reasonably reach, end to end.
+    /// Runs the real OSR roster (Warrior, Ranger and Wizard against goblins and an ogre — not the legacy Test Hero/Slime fixture)
+    /// through a full autopilot encounter — exercises the d12 initiative scheduler, attack rolls against AC, the Wizard's AP and
+    /// spells (saves, Web, Fireball), monster morale and fleeing, and melee/ranged gating, end to end.
+    /// (The class keeps its old name so the test's history stays attached.)
     /// </summary>
     public class DuelwrightEncounterSmokeTest
     {
@@ -29,7 +29,7 @@ namespace Game.Combat.Tests.PlayMode
         public IEnumerator StartEncounter_DuelwrightSkirmish_ResolvesWithoutHangingOrThrowing()
         {
             var encounter = Resources.Load<EncounterDefinition>("Data/Encounters/EncounterDuelwrightSkirmish");
-            Assert.IsNotNull(encounter, "Expected the Duelwright sample EncounterDefinition to be resolvable from Resources.");
+            Assert.IsNotNull(encounter, "Expected the sample skirmish EncounterDefinition to be resolvable from Resources.");
 
             var runnerObject = new GameObject("TestEncounterRunner");
             var runner = runnerObject.AddComponent<EncounterRunner>();

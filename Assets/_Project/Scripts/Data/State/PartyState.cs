@@ -29,10 +29,34 @@ namespace Game.Data.State
             if (!string.IsNullOrEmpty(actorId)) Hp[actorId] = Mathf.Max(1, hp);
         }
 
-        /// <summary>Forget all remembered HP, which means everyone is at full HP again.</summary>
-        public static void HealAll() => Hp.Clear();
+        // Slime acid: armor AC lost and weapon damage lost, kept until repaired / sharpened (resting heals them too for now).
+        static readonly Dictionary<string, (int armor, int weapon)> Corrosion = new Dictionary<string, (int armor, int weapon)>();
+
+        public static (int armor, int weapon) GetCorrosion(string actorId)
+        {
+            return !string.IsNullOrEmpty(actorId) && Corrosion.TryGetValue(actorId, out var value) ? value : (0, 0);
+        }
+
+        public static void SetCorrosion(string actorId, int armor, int weapon)
+        {
+            if (string.IsNullOrEmpty(actorId)) return;
+
+            if (armor <= 0 && weapon <= 0) Corrosion.Remove(actorId);
+            else Corrosion[actorId] = (Mathf.Max(0, armor), Mathf.Max(0, weapon));
+        }
+
+        /// <summary>Forget all remembered HP and corrosion, which means everyone is at full HP and in working order again.</summary>
+        public static void HealAll()
+        {
+            Hp.Clear();
+            Corrosion.Clear();
+        }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void ResetOnPlay() => Hp.Clear();
+        static void ResetOnPlay()
+        {
+            Hp.Clear();
+            Corrosion.Clear();
+        }
     }
 }

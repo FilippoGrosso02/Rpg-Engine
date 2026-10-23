@@ -12,11 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 83f56871cfc6b384c9f425c0fa4ece1b, type: 3}
   m_Name: EncounterDuelwrightSkirmish
   m_EditorClassIdentifier: Game.Combat.Contracts::Game.Combat.Contracts.EncounterDefinition
+  useFixedParty: 0
   partyActorIds:
-  - actor_nun
-  - actor_count
-  - actor_countess
+  - actor_warrior
+  - actor_ranger
+  - actor_wizard
   enemyIds:
-  - enemy_grunt
-  - enemy_grunt
-  - enemy_brute
+  - enemy_goblin
+  - enemy_goblin
+  - enemy_goblin
+  - enemy_ogre

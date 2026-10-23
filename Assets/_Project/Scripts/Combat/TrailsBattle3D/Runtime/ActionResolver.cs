@@ -4,24 +4,24 @@ using Game.Combat.Contracts;
 using Game.Common.Area;
 using Game.Data.Definitions;
 using Game.Data.Enums;
+using Game.Data.Rules;
 using UnityEngine;
 
 namespace Game.Combat.TrailsBattle3D.Runtime
 {
     /// <summary>
-    /// Resolves targeting, damage, and Guard per the Duelwright rules: damage = 1d6 + ATK -
-    /// DEF (min 1), natural 6 crits and ignores DEF entirely (damage = ATK + 6). Fear
-    /// (FearRuntime) and status (StatusEffectRuntime) modifiers both apply to effective
-    /// ATK/DEF; effective DEF is floored at 0. A handful of cards override parts of this via
-    /// SkillDefinition's Duelwright fields (bonusPower/ignoresDef/skipDiceRoll/extraDiceCount/
-    /// critThreshold) or CardEffects (Banish's conditional DEF handling).
+    /// Resolves targeting and the d12 OSR combat rules.
+    ///
+    /// Attack: d12 + attack bonus >= target AC (a natural 1 always misses, a natural 12 always hits), then the weapon's or
+    /// stat block's damage dice. Spells: Magic Missile auto-hits; others may allow a save (d12 + VIT/MIND score >= 12)
+    /// that negates the effect (Web) or halves the damage (Fireball). Slime acid corrodes armor and metal weapons.
+    /// Each method takes an optional seeded <see cref="System.Random"/> so tests can assert exact outcomes.
     /// </summary>
     public static class ActionResolver
     {
         /// <summary>World units per point of attackRangeMultiplier — a combatant's actual
         /// attack range is attackRangeMultiplier * RangeUnit. Melee's multiplier of 1 gives a
-        /// RangeUnit-distance melee reach; ranged characters use a higher multiplier instead
-        /// of the old unlimited-range Ranged trait.</summary>
+        /// RangeUnit-distance melee reach.</summary>
         public const float RangeUnit = 2f;
 
         public const float DefaultAoeRadius = 3.5f;
@@ -29,8 +29,6 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         public const float DefaultConeAngle = 90f;
         public const float DefaultLineLength = 8f;
         public const float DefaultLineWidth = 2f;
-        private const int GuardDefBonus = 2;
-        private const int DefaultCritThreshold = 6;
 
         private static readonly System.Random SharedRandom = new System.Random();
 
@@ -93,17 +91,14 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 case TargetType.AreaCircle:
                     shape = AreaShape.Circle(skill.aoeSize > 0f ? skill.aoeSize : DefaultAoeRadius);
                     return true;
-
                 case TargetType.AreaCone:
                     shape = AreaShape.Cone(skill.aoeSize > 0f ? skill.aoeSize : DefaultConeLength,
                         skill.aoeAngle > 0f ? skill.aoeAngle : DefaultConeAngle);
                     return true;
-
                 case TargetType.AreaLine:
                     shape = AreaShape.Line(skill.aoeSize > 0f ? skill.aoeSize : DefaultLineLength,
                         skill.aoeWidth > 0f ? skill.aoeWidth : DefaultLineWidth);
                     return true;
-
                 default:
                     shape = default;
                     return false;
@@ -119,13 +114,35 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             origin = skill.targetType == TargetType.AreaCircle ? aimPosition : userPosition;
         }
 
+        // ------------------------------------------------------------------ rules
+
+        /// <summary>Armor class including status modifiers (never below 0).</summary>
+        public static int GetArmorClass(CombatantRuntime target)
+        {
+            return Mathf.Max(0, target.ArmorClass + StatusEffectRuntime.GetArmorClassModifier(target));
+        }
+
+        /// <summary>d12 attack bonus including status modifiers.</summary>
+        public static int GetAttackBonus(CombatantRuntime attacker)
+        {
+            return attacker.attackBonus + StatusEffectRuntime.GetAttackModifier(attacker);
+        }
+
+        public static int GetSaveBonus(CombatantRuntime target, SaveType saveType)
+        {
+            switch (saveType)
+            {
+                case SaveType.Vitality: return target.saveVitality;
+                case SaveType.Mind: return target.saveMind;
+                default: return 0;
+            }
+        }
+
         /// <summary>
-        /// Duelwright Basic Attack / damaging-card formula. <paramref name="rng"/> defaults to
-        /// a shared instance but accepts a seeded System.Random so tests can assert exact
-        /// outcomes instead of asserting on live randomness. Returns the full breakdown (not
-        /// just the final number) so UI code can show "ATK + roll - DEF = damage".
+        /// One attack or spell against one target: the attack roll, the damage, and any save. Does not change HP, apply
+        /// statuses or corrode anything — the caller does that from the returned breakdown, so this stays a pure function of its inputs.
         /// </summary>
-        public static DamageRollInfo ResolveDamage(
+        public static DamageRollInfo ResolveAttack(
             CombatantRuntime attacker,
             CombatantRuntime target,
             SkillDefinition skill,
@@ -133,88 +150,170 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         {
             rng ??= SharedRandom;
 
-            int fearAtkPenalty = FearRuntime.GetStatPenalty(attacker);
-            int fearDefPenalty = FearRuntime.GetStatPenalty(target);
-
-            int effectiveAtk = attacker.atk + StatusEffectRuntime.GetAtkModifier(attacker) - fearAtkPenalty;
-            int effectiveDef = target.def + StatusEffectRuntime.GetDefModifier(target) - fearDefPenalty;
-            if (target.guarding)
-            {
-                effectiveDef += GuardDefBonus;
-            }
-            effectiveDef = Mathf.Max(0, effectiveDef);
-
-            bool ignoresDef = skill.ignoresDef || CardEffects.BanishIgnoresDef(skill.id, target);
-            if (!ignoresDef && CardEffects.BanishHalvesDef(skill.id, target))
-            {
-                effectiveDef /= 2;
-            }
-
+            bool isSpell = !skill.usesWeaponDamage;
             var info = new DamageRollInfo
             {
                 attacker = attacker,
                 target = target,
-                effectiveAtk = effectiveAtk,
-                effectiveDef = effectiveDef,
-                defIgnored = ignoresDef
+                spellName = isSpell ? skill.displayName : null,
+                targetArmorClass = GetArmorClass(target)
             };
 
-            if (skill.skipDiceRoll)
+            // 1. Does it land?
+            if (isSpell && skill.autoHit)
             {
-                info.diceRoll = 0;
-                info.damage = Mathf.Max(1, effectiveAtk + skill.bonusPower);
+                info.autoHit = true;
+                info.hit = true;
+            }
+            else if (isSpell && skill.saveType != SaveType.None)
+            {
+                // Save-based spells (Web, Fireball) have no attack roll; the target's save decides what happens.
+                info.hit = true;
+            }
+            else
+            {
+                info.attackBonus = GetAttackBonus(attacker);
+                info.attackRoll = rng.Next(1, OsrRules.DieSides + 1);
+                info.naturalOne = info.attackRoll == 1;
+                info.naturalTwelve = info.attackRoll == OsrRules.DieSides;
+                info.hit = OsrRules.AttackHits(info.attackRoll, info.attackBonus, info.targetArmorClass);
+            }
+
+            if (!info.hit)
+            {
                 return info;
             }
 
-            int diceCount = Mathf.Max(1, 1 + skill.extraDiceCount);
-            int diceTotal = 0;
-            for (int i = 0; i < diceCount; i++)
+            // 2. How hard?
+            var dice = isSpell ? skill.damage : attacker.attackDamage;
+            info.damageText = dice.ToString();
+            info.damageBonus = dice.bonus;
+            int damage = 0;
+            if (dice.HasDice || dice.bonus != 0)
             {
-                diceTotal += rng.Next(1, 7);
-            }
-            info.diceRoll = diceTotal;
+                info.diceTotal = dice.HasDice ? dice.RollDice(rng) : 0;
+                if (!isSpell)
+                {
+                    info.corrosionPenalty = attacker.weaponCorrosion;
+                }
 
-            // Crit rule ("natural 6") only applies to a single-die roll — multi-dice cards
-            // (e.g. Point-Blank Blast) roll flat, no crit check.
-            int critThreshold = skill.critThreshold > 0 ? skill.critThreshold : DefaultCritThreshold;
-            if (diceCount == 1 && diceTotal >= critThreshold)
-            {
-                info.wasCrit = true;
-                info.defIgnored = true;
-                info.damage = effectiveAtk + 6 + skill.bonusPower;
-                return info;
+                // A hit always does at least 1, however badly corroded the weapon is.
+                damage = Mathf.Max(1, info.diceTotal + dice.bonus - info.corrosionPenalty);
             }
 
-            int raw = diceTotal + effectiveAtk + skill.bonusPower - (ignoresDef ? 0 : effectiveDef);
-            info.damage = Mathf.Max(1, raw);
+            // 3. Does the target resist?
+            if (isSpell && skill.saveType != SaveType.None)
+            {
+                info.hasSave = true;
+                info.saveBonus = GetSaveBonus(target, skill.saveType);
+                info.saveRoll = rng.Next(1, OsrRules.DieSides + 1);
+                info.savePassed = OsrRules.SavePasses(info.saveRoll, info.saveBonus);
+
+                if (info.savePassed)
+                {
+                    if (skill.halfDamageOnSave)
+                    {
+                        info.halved = true;
+                        damage = damage > 0 ? Mathf.Max(1, damage / 2) : 0;
+                    }
+                    else
+                    {
+                        info.effectNegated = true;
+                        damage = 0;
+                    }
+                }
+            }
+
+            info.damage = damage;
             return info;
         }
 
         /// <summary>
-        /// Brings a defeated combatant back at <see cref="SkillDefinition.reviveHp"/> HP (at least 1, at most max HP),
-        /// clearing fear, statuses and one-turn flags. Returns false (and changes nothing) if the target is still standing.
+        /// The chance (0-100) that <paramref name="skill"/> works against <paramref name="target"/>, for the hit-chance badge. It uses
+        /// exactly the dice rules ResolveAttack rolls: a weapon attack is the share of d12 rolls that reach AC (so a natural 1 always
+        /// costs 1/12), an auto-hit is 100, and a save-based spell is the share of d12 rolls the target FAILS its save on.
         /// </summary>
-        public static bool ApplyRevive(CombatantRuntime target, SkillDefinition skill)
+        public static int GetHitChancePercent(CombatantRuntime attacker, CombatantRuntime target, SkillDefinition skill)
         {
-            if (target == null || !target.IsDefeated)
+            bool isSpell = !skill.usesWeaponDamage;
+            int successes = 0;
+
+            for (int roll = 1; roll <= OsrRules.DieSides; roll++)
             {
-                return false;
+                bool works;
+                if (isSpell && skill.autoHit)
+                {
+                    works = true;
+                }
+                else if (isSpell && skill.saveType != SaveType.None)
+                {
+                    works = !OsrRules.SavePasses(roll, GetSaveBonus(target, skill.saveType));
+                }
+                else
+                {
+                    works = OsrRules.AttackHits(roll, GetAttackBonus(attacker), GetArmorClass(target));
+                }
+
+                if (works)
+                {
+                    successes++;
+                }
             }
 
-            target.currentHp = Mathf.Clamp(skill.reviveHp, 1, Mathf.Max(1, target.maxHp));
-            target.fear = 0;
-            target.wasHitSinceLastTurn = false;
-            target.guarding = false;
-            target.untargetable = false;
-            target.statuses.Clear();
-            return true;
+            return Mathf.RoundToInt(successes * 100f / OsrRules.DieSides);
         }
 
+        /// <summary>
+        /// Slime acid, after a Basic Attack that hit: the attacker's armor corrodes by 1 AC (only while it still has armor to lose),
+        /// and a metal weapon that hit a corrosive monster loses 1 damage, cumulatively, until sharpened.
+        /// </summary>
+        public static void ApplyAcidEffects(DamageRollInfo info)
+        {
+            if (info == null || !info.hit || info.spellName != null)
+            {
+                return;
+            }
+
+            if (info.attacker.corrodesArmor && info.target.armorBonus > info.target.armorCorrosion)
+            {
+                info.target.armorCorrosion++;
+            }
+
+            if (info.target.corrodesWeapons && info.attacker.weaponIsMetal)
+            {
+                info.attacker.weaponCorrosion++;
+            }
+        }
+
+        /// <summary>Guard: +2 AC until the next turn, and a caster earns 1 extra AP at that next turn.</summary>
         public static void ApplyGuard(CombatantRuntime combatant)
         {
             combatant.guarding = true;
-            combatant.pendingGuardApBonus = true;
-            combatant.fear = Mathf.Max(0, combatant.fear - 2);
+            combatant.pendingGuardApBonus = combatant.usesAp;
+        }
+
+        /// <summary>
+        /// Start-of-turn bookkeeping: Guard ends, and a caster gains AP — 1 at the start of the fight, +1 from its second turn on,
+        /// and +1 more if it guarded last turn.
+        /// </summary>
+        public static void BeginTurn(CombatantRuntime combatant)
+        {
+            combatant.guarding = false;
+
+            if (combatant.usesAp && combatant.turnsTaken > 0)
+            {
+                int gain = 1 + (combatant.pendingGuardApBonus ? 1 : 0);
+                combatant.currentAp = Mathf.Min(combatant.maxAp, combatant.currentAp + gain);
+            }
+
+            combatant.pendingGuardApBonus = false;
+            combatant.turnsTaken++;
+        }
+
+        /// <summary>d12 + initiative, rolled for each combatant every round.</summary>
+        public static int RollInitiative(CombatantRuntime combatant, System.Random rng)
+        {
+            return rng.Next(1, OsrRules.DieSides + 1) + combatant.initiative;
         }
     }
 }

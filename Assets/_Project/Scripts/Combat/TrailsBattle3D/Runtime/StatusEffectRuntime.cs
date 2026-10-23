@@ -7,20 +7,22 @@ using UnityEngine;
 namespace Game.Combat.TrailsBattle3D.Runtime
 {
     /// <summary>
-    /// Apply/tick/expire for statuses on a CombatantRuntime. No stacking rule is defined
-    /// in StatusEffectDefinition (schema gap, see project memory) — reapplying an already
-    /// active status just refreshes its remaining duration instead of stacking.
+    /// Apply/tick/expire for statuses on a CombatantRuntime. Reapplying an already active status just refreshes its
+    /// remaining duration instead of stacking. Durations count the affected unit's own turns and are ticked at the END
+    /// of each of its turns, so a 2-turn web really holds it for two whole turns.
     /// </summary>
     public static class StatusEffectRuntime
     {
-        public static void TryApply(CombatantRuntime target, string statusEffectId, float chance)
+        /// <param name="rng">Optional seeded generator so tests can assert exact outcomes.</param>
+        public static void TryApply(CombatantRuntime target, string statusEffectId, float chance, System.Random rng = null)
         {
             if (string.IsNullOrEmpty(statusEffectId))
             {
                 return;
             }
 
-            if (UnityEngine.Random.value > chance)
+            double roll = rng != null ? rng.NextDouble() : UnityEngine.Random.value;
+            if (roll > chance)
             {
                 return;
             }
@@ -45,7 +47,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             });
         }
 
-        /// <summary>Ticks DoT damage and counts down duration, removing expired statuses.</summary>
+        /// <summary>Ticks DoT damage and counts down duration, removing expired statuses. Called at the end of the unit's own turn.</summary>
         public static void TickAndExpire(CombatantRuntime combatant)
         {
             for (int i = combatant.statuses.Count - 1; i >= 0; i--)
@@ -76,9 +78,14 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             return AnyStatus(combatant, d => d.preventsAction);
         }
 
-        public static int GetAtkModifier(CombatantRuntime combatant) => SumStatus(combatant, d => d.atkModifier);
-        public static int GetDefModifier(CombatantRuntime combatant) => SumStatus(combatant, d => d.defModifier);
-        public static int GetSpeedModifier(CombatantRuntime combatant) => SumStatus(combatant, d => d.speedModifier);
+        public static bool IsMovementPrevented(CombatantRuntime combatant)
+        {
+            return AnyStatus(combatant, d => d.preventsMovement);
+        }
+
+        public static int GetAttackModifier(CombatantRuntime combatant) => SumStatus(combatant, d => d.attackModifier);
+
+        public static int GetArmorClassModifier(CombatantRuntime combatant) => SumStatus(combatant, d => d.armorClassModifier);
 
         private static bool AnyStatus(CombatantRuntime combatant, Func<StatusEffectDefinition, bool> predicate)
         {

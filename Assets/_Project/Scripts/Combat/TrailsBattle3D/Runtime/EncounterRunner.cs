@@ -8,6 +8,7 @@ using Game.Common.Area;
 using Game.Data.Definitions;
 using Game.Data.Enums;
 using Game.Data.Registry;
+using Game.Data.Rules;
 using Game.Data.State;
 using UnityEngine;
 using UnityEngine.AI;
@@ -54,6 +55,8 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         public event Action<EncounterResult> OnEncounterEnded;
         public event Action<CombatantRuntime> OnHoverChanged;
         public event Action<DamageRollInfo> OnDamageRolled;
+        public event Action<AimReadout> OnAimChanged;
+        public event Action OnPlayerActionCommitted;
 
         private List<CombatantRuntime> _combatants;
         private Dictionary<CombatantRuntime, GameObject> _views;
@@ -80,7 +83,12 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         private BattleCameraRig _cameraRig;
         private CombatantRuntime _cameraFocus;
         private bool _manualMoving;
-        private bool _cursorToggledFree;
+        private bool _actionsSuspended;
+        private bool _fleeRequested;
+        private bool _encounterFled;
+        private CombatantRuntime _lastAimTarget;
+        private int _lastAimChance = -1;
+        private bool _lastAimBasic;
         private bool _encounterOver;
         private bool _cursorStateSaved;
         private CursorLockMode _savedLockState;
@@ -95,7 +103,9 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             _encounter = encounter;
             _onComplete = onComplete;
             _encounterOver = false;
-            _cursorToggledFree = false;
+            _actionsSuspended = false;
+            _fleeRequested = false;
+            _encounterFled = false;
             _appliedCursorFree = -1;
             if (!_cursorStateSaved)
             {
@@ -113,9 +123,9 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         }
 
         /// <summary>
-        /// Third-person look needs the mouse, so the cursor is locked and hidden during the battle. Holding Alt
-        /// (or toggling with Tab) frees it for the HUD buttons, and it is always freed once the encounter ends
-        /// so the result panel can be clicked. Skipped when autoPiloting (headless tests).
+        /// The battle UI is keyboard-only and the mouse only aims, so the cursor is locked and hidden for the whole fight. It is
+        /// freed once the encounter ends so the result panel's Continue button can also be clicked. Skipped when autoPiloting
+        /// (headless tests).
         /// </summary>
         private void UpdateCursorMode()
         {
@@ -124,16 +134,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 return;
             }
 
-            if (Input.GetKeyDown(KeyCode.Tab))
-            {
-                _cursorToggledFree = !_cursorToggledFree;
-            }
-
-            bool wantFree = _encounterOver
-                || _cursorToggledFree
-                || Input.GetKey(KeyCode.LeftAlt)
-                || Input.GetKey(KeyCode.RightAlt);
-
+            bool wantFree = _encounterOver;
             _cameraRig?.SetLookEnabled(!wantFree);
 
             int applied = wantFree ? 1 : 0;
@@ -207,7 +208,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                     direction.Normalize();
                 }
 
-                if (MovementController.TryStep(actor.position, direction * (MoveSpeed * Time.deltaTime), _turnStartPosition, actor.moveRange, out var next))
+                if (MovementController.TryStep(actor.position, direction * (MoveSpeed * Time.deltaTime), _turnStartPosition, EffectiveMoveRange(actor), out var next))
                 {
                     actor.position = next;
                     SyncViewPosition(actor);
@@ -274,8 +275,26 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 return;
             }
 
+            if (command == PlayerCommand.SuspendActions)
+            {
+                _actionsSuspended = true;
+                return;
+            }
+
+            if (command == PlayerCommand.ResumeActions)
+            {
+                _actionsSuspended = false;
+                return;
+            }
+
             if (_currentPlayerActor == null)
             {
+                return;
+            }
+
+            if (command == PlayerCommand.Flee)
+            {
+                _fleeRequested = true;
                 return;
             }
 
@@ -283,10 +302,6 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             {
                 _pendingCommand = null;
                 _pendingSkill = null;
-                // Re-firing OnTurnStarted is what actually re-opens the command menu and
-                // clears the targeting prompt — both already reset on this event, so
-                // cancelling doesn't need its own UI-facing event.
-                OnTurnStarted?.Invoke(_currentPlayerActor);
                 return;
             }
 
@@ -337,54 +352,31 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                     break;
                 }
 
-                // Guard/Smoke Bomb/Bodyguard all protect until this unit's own next turn, then
-                // clear so it can choose again. Life Bond instead counts down its own duration.
-                actor.guarding = false;
-                actor.untargetable = false;
-                actor.bodyguardTarget = null;
-                if (actor.lifeBondProtector != null)
-                {
-                    actor.lifeBondTurnsRemaining--;
-                    if (actor.lifeBondTurnsRemaining <= 0)
-                    {
-                        actor.lifeBondProtector = null;
-                    }
-                }
-
-                int apGain = Mathf.Max(0, actor.speed);
-                if (actor.pendingGuardApBonus)
-                {
-                    apGain += 2;
-                    actor.pendingGuardApBonus = false;
-                }
-                actor.currentAp = Mathf.Min(actor.maxAp, actor.currentAp + apGain);
-                FearRuntime.DecayAtTurnStart(actor);
+                // Guard ends at the start of the unit's own turn, and a caster gains its AP.
+                ActionResolver.BeginTurn(actor);
 
                 OnTurnStarted?.Invoke(actor);
 
+                if (!actor.IsDefeated && !StatusEffectRuntime.IsActionPrevented(actor))
+                {
+                    yield return ProcessTurn(actor);
+                    UpdateViewPositions();
+                }
+
+                // Statuses (a web, poison...) count down at the end of the unit's own turn.
                 var hpBeforeTick = actor.currentHp;
                 StatusEffectRuntime.TickAndExpire(actor);
                 RaiseStateChanged(actor);
-                if (hpBeforeTick > 0 && actor.IsDefeated)
+                if (hpBeforeTick > 0 && actor.IsSlain)
                 {
                     OnCombatantDefeated?.Invoke(actor);
+                    ResolveMorale();
                 }
 
-                if (!actor.IsDefeated && !StatusEffectRuntime.IsActionPrevented(actor))
+                if (_encounterFled)
                 {
-                    if (FearRuntime.ShouldFreeze(actor))
-                    {
-                        // Fear >= 10: unit freezes and is forced to Guard this turn instead of
-                        // acting normally.
-                        ActionResolver.ApplyGuard(actor);
-                        RaiseStateChanged(actor);
-                    }
-                    else
-                    {
-                        yield return ProcessTurn(actor);
-                    }
-
-                    UpdateViewPositions();
+                    result = new EncounterResult { victory = false, fled = true };
+                    break;
                 }
 
                 RaiseTurnOrderChanged();
@@ -396,7 +388,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 result = BuildTimeoutResult();
             }
 
-            if (result.victory)
+            if (result.victory || result.fled)
             {
                 SavePartyState();
             }
@@ -445,38 +437,18 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
         private IEnumerator ResolveAiTurn(CombatantRuntime actor, List<CombatantRuntime> opponents)
         {
-            // Noble Challenge: a forced target overrides "attack nearest" for one turn.
-            CombatantRuntime forcedTarget = actor.forcedAttackTarget != null && !actor.forcedAttackTarget.IsDefeated
-                ? actor.forcedAttackTarget
-                : null;
-            actor.forcedAttackTarget = null;
-
-            var allies = _combatants.Where(c => !c.IsDefeated && c.isPlayerSide == actor.isPlayerSide).ToList();
-            var (skill, target, guard) = ChooseAiAction(actor, opponents, allies, forcedTarget);
-
-            if (guard)
-            {
-                ActionResolver.ApplyGuard(actor);
-                RaiseStateChanged(actor);
-                yield break;
-            }
-
+            var (skill, target) = ChooseAiAction(actor, opponents);
             if (skill == null || target == null)
             {
                 yield break;
             }
 
-            bool targetIsOpponent = target.isPlayerSide != actor.isPlayerSide;
-            if (targetIsOpponent)
+            var attackRange = AttackRangeFor(actor);
+            yield return MoveWithinRange(actor, target.position, attackRange);
+            if (Vector3.Distance(actor.position, target.position) > attackRange + 0.1f)
             {
-                var attackRange = AttackRangeFor(actor);
-                yield return MoveWithinRange(actor, target.position, attackRange);
-                if (Vector3.Distance(actor.position, target.position) > attackRange + 0.1f)
-                {
-                    // Couldn't close the distance (e.g. path blocked, or out of move range) —
-                    // action fizzles this turn.
-                    yield break;
-                }
+                // Couldn't close the distance (e.g. path blocked, webbed, or out of move range) — the action fizzles this turn.
+                yield break;
             }
 
             yield return PerformSkill(actor, skill, target);
@@ -485,95 +457,66 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         /// <summary>Actual attack distance in world units: attackRangeMultiplier * RangeUnit.
         /// A multiplier of 1 (melee) gives RangeUnit reach; ranged combatants use a higher
         /// multiplier instead of the old unlimited-range Ranged trait.</summary>
+        /// <summary>Move range right now: 0 while webbed (or otherwise held in place), else the combatant's own.</summary>
+        private static float EffectiveMoveRange(CombatantRuntime combatant)
+        {
+            return StatusEffectRuntime.IsMovementPrevented(combatant) ? 0f : combatant.moveRange;
+        }
+
         private static float AttackRangeFor(CombatantRuntime combatant)
         {
             return combatant.attackRangeMultiplier * ActionResolver.RangeUnit;
         }
 
         /// <summary>
-        /// A simple, deterministic AI policy — not tactically deep, just enough for the
-        /// roster's cards (and monster kits) to actually see use instead of every AI turn
-        /// being a Basic Attack: Guard when badly hurt or fairly afraid; otherwise use the
-        /// first affordable Craft whose target type it can satisfy (an enemy-targeting card
-        /// vs. the nearest/forced opponent, a self/ally-targeting card vs. itself or its
-        /// neediest living ally); otherwise fall back to the Basic Attack.
+        /// A simple, deterministic AI policy: a caster uses the first spell it can afford that targets enemies (so a wizard on
+        /// autopilot actually casts), everything else attacks the nearest opponent with its Basic Attack.
         /// </summary>
-        private (SkillDefinition skill, CombatantRuntime target, bool guard) ChooseAiAction(
-            CombatantRuntime actor,
-            List<CombatantRuntime> opponents,
-            List<CombatantRuntime> allies,
-            CombatantRuntime forcedTarget)
+        private (SkillDefinition skill, CombatantRuntime target) ChooseAiAction(CombatantRuntime actor, List<CombatantRuntime> opponents)
         {
-            bool lowHp = actor.currentHp <= actor.maxHp / 3;
-            bool anxious = actor.fear >= 7;
-            if (lowHp || anxious)
-            {
-                return (null, null, true);
-            }
-
-            var nearestOpponent = forcedTarget ?? opponents.OrderBy(o => Vector3.Distance(actor.position, o.position)).First();
-
-            // Bringing a fallen ally back beats everything else the actor could do with its AP.
-            var fallenAlly = _combatants.FirstOrDefault(c => c.isPlayerSide == actor.isPlayerSide && c.IsDefeated);
-            if (fallenAlly != null)
-            {
-                foreach (var skillId in actor.skillIds)
-                {
-                    var reviveSkill = DatabaseRegistry.GetSkill(skillId);
-                    if (reviveSkill != null && reviveSkill.isRevive && actor.currentAp >= reviveSkill.apCost)
-                    {
-                        return (reviveSkill, fallenAlly, false);
-                    }
-                }
-            }
+            var nearestOpponent = opponents.OrderBy(o => Vector3.Distance(actor.position, o.position)).First();
 
             for (int i = 1; i < actor.skillIds.Count; i++)
             {
-                var skill = DatabaseRegistry.GetSkill(actor.skillIds[i]);
-                if (skill == null || actor.currentAp < skill.apCost)
+                var spell = DatabaseRegistry.GetSkill(actor.skillIds[i]);
+                if (spell == null || actor.currentAp < spell.apCost)
                 {
                     continue;
                 }
 
-                switch (skill.targetType)
+                switch (spell.targetType)
                 {
                     case TargetType.SingleEnemy:
                     case TargetType.AllEnemies:
                     case TargetType.AreaCircle:
                     case TargetType.AreaCone:
                     case TargetType.AreaLine:
-                        return (skill, nearestOpponent, false);
-
-                    case TargetType.SingleAlly:
-                    case TargetType.AllAllies:
-                    {
-                        if (skill.isRevive)
-                        {
-                            var fallen = _combatants.FirstOrDefault(c => c.isPlayerSide == actor.isPlayerSide && c.IsDefeated);
-                            if (fallen != null)
-                            {
-                                return (skill, fallen, false);
-                            }
-                            break;
-                        }
-
-                        var neediest = allies
-                            .Where(c => c != actor)
-                            .OrderBy(c => (float)c.currentHp / c.maxHp)
-                            .FirstOrDefault();
-                        if (neediest != null)
-                        {
-                            return (skill, neediest, false);
-                        }
-                        break;
-                    }
-
-                    case TargetType.Self:
-                        return (skill, actor, false);
+                        // Prefer the most expensive spell it can afford: build up AP, then let it go.
+                        return (BestAffordableSpell(actor) ?? spell, nearestOpponent);
                 }
             }
 
-            return (GetFirstUsableSkill(actor), nearestOpponent, false);
+            return (GetFirstUsableSkill(actor), nearestOpponent);
+        }
+
+        private static SkillDefinition BestAffordableSpell(CombatantRuntime actor)
+        {
+            SkillDefinition best = null;
+            for (int i = 1; i < actor.skillIds.Count; i++)
+            {
+                var spell = DatabaseRegistry.GetSkill(actor.skillIds[i]);
+                if (spell == null || actor.currentAp < spell.apCost || IsAllyTargetedSkill(spell) || spell.targetType == TargetType.Self)
+                {
+                    continue;
+                }
+
+                if (best == null || spell.apCost > best.apCost)
+                {
+                    best = spell;
+                }
+            }
+
+            return best;
         }
 
         /// <summary>
@@ -591,7 +534,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
             EnsureRangeAreas();
             EnsureHoverVisuals();
-            _movementArea.ShowCircle(_turnStartPosition, actor.moveRange);
+            _movementArea.ShowCircle(_turnStartPosition, EffectiveMoveRange(actor));
 
             var targeting = GetComponent<TargetingInput>();
             if (targeting != null)
@@ -606,19 +549,34 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
             while (true)
             {
-                UpdateManualMovement(actor, targeting);
+                if (!_actionsSuspended)
+                {
+                    UpdateManualMovement(actor, targeting);
+                }
+
                 UpdateHoverPreview(actor, targeting);
                 UpdateAttackRangeArea(actor, targeting);
                 UpdateAoePreview(actor, targeting);
+                UpdateAimReadout(actor, targeting);
+
+                if (_fleeRequested)
+                {
+                    _fleeRequested = false;
+                    _encounterFled = true;
+                    OnPlayerActionCommitted?.Invoke();
+                    break;
+                }
 
                 if (_pendingCommand == PlayerCommand.Guard)
                 {
+                    OnPlayerActionCommitted?.Invoke();
                     ActionResolver.ApplyGuard(actor);
                     RaiseStateChanged(actor);
                     break;
                 }
 
-                if (targeting != null && Input.GetMouseButtonDown(0))
+                // Commit with left click or Space. While a UI prompt is open (the flee confirmation) neither does anything.
+                if (targeting != null && !_actionsSuspended && (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.Space)))
                 {
                     // Heal / revive: pick among allies on screen (defeated allies are hidden and have no
                     // collider, so this is a screen-proximity pick rather than a raycast). A click that
@@ -633,6 +591,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                             yield return MoveWithinRange(actor, ally.position, allyRange);
                             if (Vector3.Distance(actor.position, ally.position) <= allyRange + 0.1f)
                             {
+                                OnPlayerActionCommitted?.Invoke();
                                 yield return PerformSkill(actor, allySkill, ally);
                                 break;
                             }
@@ -648,11 +607,8 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                         // first takes priority, otherwise it falls back to the Basic Attack
                         // so no menu step is needed for the common case.
                         var skillToUse = _pendingSkill ?? GetFirstUsableSkill(actor);
-                        bool isBasicAttack = actor.skillIds.Count > 0 && skillToUse != null && skillToUse.id == actor.skillIds[0];
 
-                        if (skillToUse != null
-                            && actor.currentAp >= skillToUse.apCost
-                            && !(view.Runtime.untargetable && isBasicAttack))
+                        if (skillToUse != null && actor.currentAp >= skillToUse.apCost)
                         {
                             var attackRange = AttackRangeFor(actor);
                             yield return MoveWithinRange(actor, view.Runtime.position, attackRange);
@@ -660,21 +616,10 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
                             if (canAct)
                             {
+                                OnPlayerActionCommitted?.Invoke();
                                 yield return PerformSkill(actor, skillToUse, view.Runtime);
                                 break;
                             }
-                        }
-                    }
-                    else if (!targeting.CursorLocked && targeting.TryRaycastGround(out var point))
-                    {
-                        // Click-to-move is only a fallback while the cursor is free (Alt / Tab); with the
-                        // cursor locked, movement is WASD (UpdateManualMovement).
-                        // Anchored to the turn-start position (not the actor's current,
-                        // possibly-already-moved position) so repeated clicks can't chain
-                        // into unlimited movement across a single turn.
-                        if (MovementController.TryGetMovePosition(_turnStartPosition, point, actor.moveRange, out var newPosition))
-                        {
-                            yield return MoveAlongPath(actor, newPosition);
                         }
                     }
                 }
@@ -694,9 +639,63 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             _hoverHighlightRing.Hide();
             _movementPathPreview.Hide();
 
+            ClearAimReadout();
             _currentPlayerActor = null;
             _pendingCommand = null;
             _pendingSkill = null;
+        }
+
+        /// <summary>
+        /// Tells the HUD which living enemy the reticle is on and the chance the current action (the selected spell, or the Basic
+        /// Attack) works on it. Fires only when the target or the chance actually changes.
+        /// </summary>
+        private void UpdateAimReadout(CombatantRuntime actor, TargetingInput targeting)
+        {
+            CombatantRuntime aimed = null;
+            int chance = 0;
+            bool basic = false;
+
+            if (targeting != null
+                && !_actionsSuspended
+                && targeting.TryRaycastCombatant(out var view)
+                && view.Runtime != null
+                && !view.Runtime.IsDefeated
+                && view.Runtime.isPlayerSide != actor.isPlayerSide
+                && !IsAllyTargetedSkill(_pendingSkill))
+            {
+                aimed = view.Runtime;
+                var skill = _pendingSkill ?? GetFirstUsableSkill(actor);
+                basic = _pendingSkill == null;
+                if (skill != null)
+                {
+                    chance = ActionResolver.GetHitChancePercent(actor, aimed, skill);
+                }
+            }
+
+            if (aimed == _lastAimTarget && chance == _lastAimChance && basic == _lastAimBasic)
+            {
+                return;
+            }
+
+            _lastAimTarget = aimed;
+            _lastAimChance = chance;
+            _lastAimBasic = basic;
+            OnAimChanged?.Invoke(aimed == null
+                ? AimReadout.None
+                : new AimReadout { target = aimed, hitChancePercent = chance, isBasicAttack = basic });
+        }
+
+        private void ClearAimReadout()
+        {
+            if (_lastAimTarget == null && _lastAimChance < 0)
+            {
+                return;
+            }
+
+            _lastAimTarget = null;
+            _lastAimChance = -1;
+            _lastAimBasic = false;
+            OnAimChanged?.Invoke(AimReadout.None);
         }
 
         /// <summary>
@@ -744,9 +743,9 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             // you walk with WASD, so a "move here" marker under the crosshair would be misleading.
             if (!targeting.CursorLocked
                 && targeting.TryRaycastGround(out var point)
-                && NavMesh.SamplePosition(point, out var navHit, actor.moveRange + 5f, NavMesh.AllAreas))
+                && NavMesh.SamplePosition(point, out var navHit, EffectiveMoveRange(actor) + 5f, NavMesh.AllAreas))
             {
-                _movementPathPreview.Show(actor.position, navHit.position, _turnStartPosition, actor.moveRange);
+                _movementPathPreview.Show(actor.position, navHit.position, _turnStartPosition, EffectiveMoveRange(actor));
             }
             else
             {
@@ -762,7 +761,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         /// <summary>Who a single-ally skill can be aimed at: fallen allies for a revive, living allies (self included) otherwise.</summary>
         private IEnumerable<CombatantRuntime> AllyTargetCandidates(CombatantRuntime actor, SkillDefinition skill)
         {
-            return _combatants.Where(c => c.isPlayerSide == actor.isPlayerSide && c.IsDefeated == skill.isRevive);
+            return _combatants.Where(c => c.isPlayerSide == actor.isPlayerSide && !c.IsDefeated);
         }
 
         private static SkillDefinition GetFirstUsableSkill(CombatantRuntime actor)
@@ -793,7 +792,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             var directionToTarget = (targetPosition - actor.position).normalized;
             var moveGoal = targetPosition - directionToTarget * desiredRange;
 
-            if (MovementController.TryGetMovePosition(_turnStartPosition, moveGoal, actor.moveRange, out var newPosition))
+            if (MovementController.TryGetMovePosition(_turnStartPosition, moveGoal, EffectiveMoveRange(actor), out var newPosition))
             {
                 yield return MoveAlongPath(actor, newPosition);
             }
@@ -1118,108 +1117,59 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             actor.currentAp = Mathf.Max(0, actor.currentAp - Mathf.Max(0, skill.apCost));
 
             var targets = ActionResolver.ResolveTargets(skill, actor, primaryTarget, _combatants);
-            foreach (var rawTarget in targets)
+            foreach (var target in targets)
             {
-                // Bodyguard: a full one-time redirect onto the protector, resolved as if the
-                // attack targeted them from the start (their DEF/fear, not the original ally's).
-                var target = skill.isRevive ? rawTarget : ResolveBodyguardRedirect(rawTarget);
                 var wasAlive = !target.IsDefeated;
 
-                if (skill.isRevive)
+                var rollInfo = ActionResolver.ResolveAttack(actor, target, skill);
+                if (rollInfo.damage > 0)
                 {
-                    ActionResolver.ApplyRevive(target, skill);
-                }
-                else if (skill.isHeal)
-                {
-                    int healed = UnityEngine.Random.Range(1, 7) + skill.healBonus;
-                    target.currentHp = Mathf.Min(target.maxHp, target.currentHp + healed);
-                }
-                else if (skill.skipDamage)
-                {
-                    if (skill.fearDelta != 0)
-                    {
-                        target.fear = Mathf.Clamp(target.fear + skill.fearDelta, 0, 10);
-                    }
-                }
-                else
-                {
-                    var rollInfo = ActionResolver.ResolveDamage(actor, target, skill);
-                    ApplyDamageWithLifeBond(target, rollInfo.damage);
-                    FearRuntime.ApplyFearFromHit(target, rollInfo.wasCrit, actor.isHorror);
-                    if (skill.fearDelta != 0)
-                    {
-                        target.fear = Mathf.Clamp(target.fear + skill.fearDelta, 0, 10);
-                    }
-                    OnDamageRolled?.Invoke(rollInfo);
+                    target.currentHp = Mathf.Max(0, target.currentHp - rollInfo.damage);
                 }
 
-                if (!string.IsNullOrEmpty(skill.statusEffectId))
+                ActionResolver.ApplyAcidEffects(rollInfo);
+
+                if (rollInfo.hit && !rollInfo.effectNegated && !string.IsNullOrEmpty(skill.statusEffectId))
                 {
                     StatusEffectRuntime.TryApply(target, skill.statusEffectId, skill.statusEffectChance);
                 }
 
+                OnDamageRolled?.Invoke(rollInfo);
                 RaiseStateChanged(target);
 
-                if (wasAlive && target.IsDefeated)
+                if (wasAlive && target.IsSlain)
                 {
                     OnCombatantDefeated?.Invoke(target);
                 }
             }
 
-            if (skill.selfDamage > 0)
-            {
-                var wasAlive = !actor.IsDefeated;
-                actor.currentHp = Mathf.Max(0, actor.currentHp - skill.selfDamage);
-                RaiseStateChanged(actor);
-                if (wasAlive && actor.IsDefeated)
-                {
-                    OnCombatantDefeated?.Invoke(actor);
-                }
-            }
-
-            CardEffects.TryApply(skill.id, actor, primaryTarget);
+            RaiseStateChanged(actor); // AP spent, armor or weapon corroded
+            ResolveMorale();
         }
 
-        /// <summary>If someone is guarding <paramref name="target"/> with Bodyguard, the attack
-        /// redirects onto the protector entirely (consuming the redirect) instead of hitting
-        /// the originally-clicked/targeted combatant.</summary>
-        private CombatantRuntime ResolveBodyguardRedirect(CombatantRuntime target)
+        /// <summary>
+        /// After anything that can thin a monster group, lets the monsters roll morale. A monster that flees can itself
+        /// push the rest over the "half the group is down" line, so this repeats until nobody else runs.
+        /// </summary>
+        private void ResolveMorale()
         {
-            var protector = _combatants.FirstOrDefault(c => !c.IsDefeated && c.bodyguardTarget == target);
-            if (protector == null)
+            bool anyFled;
+            do
             {
-                return target;
-            }
-
-            protector.bodyguardTarget = null;
-            return protector;
-        }
-
-        /// <summary>Life Bond splits incoming HP loss between the bonded target and its
-        /// protector; everything else about the hit (DEF, fear) already resolved against the
-        /// original target before this runs.</summary>
-        private void ApplyDamageWithLifeBond(CombatantRuntime target, int damage)
-        {
-            var protector = target.lifeBondProtector;
-            if (protector != null && !protector.IsDefeated)
-            {
-                int protectorShare = damage / 2;
-                int targetShare = damage - protectorShare;
-                var wasProtectorAlive = !protector.IsDefeated;
-
-                protector.currentHp = Mathf.Max(0, protector.currentHp - protectorShare);
-                target.currentHp = Mathf.Max(0, target.currentHp - targetShare);
-
-                RaiseStateChanged(protector);
-                if (wasProtectorAlive && protector.IsDefeated)
+                anyFled = false;
+                foreach (var check in MoraleRuntime.CheckSide(_combatants))
                 {
-                    OnCombatantDefeated?.Invoke(protector);
+                    Debug.Log($"[Morale] {check.monster.displayName} ({check.trigger}): 2d6 rolled {check.roll} vs morale {check.morale} — {(check.fled ? "flees!" : "holds")}");
+
+                    if (check.fled)
+                    {
+                        anyFled = true;
+                        RaiseStateChanged(check.monster);
+                        OnCombatantDefeated?.Invoke(check.monster);
+                    }
                 }
             }
-            else
-            {
-                target.currentHp = Mathf.Max(0, target.currentHp - damage);
-            }
+            while (anyFled);
         }
 
         private void RaiseStateChanged(CombatantRuntime combatant)
@@ -1253,6 +1203,14 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 }
 
                 animator?.ClearAction();
+                return;
+            }
+
+            if (combatant.hasFled && !combatant.IsSlain)
+            {
+                // A monster that fled the fight just leaves — no fall animation, nothing to revive.
+                _dyingViews.Remove(combatant);
+                view.SetActive(false);
                 return;
             }
 
@@ -1362,28 +1320,32 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             return points[index % points.Length];
         }
 
-        private static CombatantRuntime BuildAllyRuntime(ActorDefinition actorDef)
+        /// <summary>
+        /// Derives a hero's combat numbers from the d12 sheet: HP = hit die (max) + VIT modifier, AC = 6 + armor + DEX modifier,
+        /// attack = STR (melee) or DEX (ranged) score, damage = weapon dice + STR modifier (bows excepted), initiative = DEX.
+        /// </summary>
+        public static CombatantRuntime BuildAllyRuntime(ActorDefinition actorDef)
         {
-            int atkBonus = 0;
-            int defBonus = 0;
+            var classDef = DatabaseRegistry.GetClass(actorDef.classId);
+            int hitDie = classDef != null ? classDef.hitDieSides : 8;
+            int maxHp = OsrRules.MaxHitPoints(hitDie, actorDef.vitality);
 
-            if (!string.IsNullOrEmpty(actorDef.startingWeaponId))
+            int armorBonus = 0;
+            foreach (var armorId in actorDef.startingArmorIds)
             {
-                var weapon = DatabaseRegistry.GetWeapon(actorDef.startingWeaponId);
-                if (weapon != null)
-                {
-                    atkBonus += weapon.atkBonus;
-                }
-            }
-
-            if (!string.IsNullOrEmpty(actorDef.startingArmorId))
-            {
-                var armor = DatabaseRegistry.GetArmor(actorDef.startingArmorId);
+                var armor = DatabaseRegistry.GetArmor(armorId);
                 if (armor != null)
                 {
-                    defBonus += armor.defBonus;
+                    armorBonus += armor.acBonus;
                 }
             }
+
+            var weapon = string.IsNullOrEmpty(actorDef.startingWeaponId) ? null : DatabaseRegistry.GetWeapon(actorDef.startingWeaponId);
+            bool ranged = weapon != null && weapon.isRanged;
+            var dice = weapon != null ? weapon.damage : new DiceRoll(1, 3, 0); // bare hands: d3
+            int strengthBonus = weapon == null || weapon.addsStrengthModifier ? OsrRules.Modifier(actorDef.strength) : 0;
+
+            var corrosion = PartyState.GetCorrosion(actorDef.id);
 
             return new CombatantRuntime
             {
@@ -1391,20 +1353,32 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 displayName = actorDef.displayName,
                 roleLabel = actorDef.roleLabel,
                 isPlayerSide = true,
-                maxHp = actorDef.baseHp,
-                currentHp = PartyState.GetStartingHp(actorDef.id, actorDef.baseHp),
-                maxEp = actorDef.baseMp,
-                currentEp = actorDef.baseMp,
-                atk = actorDef.baseAtk + atkBonus,
-                def = actorDef.baseDef + defBonus,
-                speed = actorDef.baseSpeed,
+                maxHp = maxHp,
+                currentHp = PartyState.GetStartingHp(actorDef.id, maxHp),
+                strength = actorDef.strength,
+                dexterity = actorDef.dexterity,
+                vitality = actorDef.vitality,
+                mind = actorDef.mind,
+                charm = actorDef.charm,
+                baseArmorClass = OsrRules.ArmorClass(armorBonus, actorDef.dexterity),
+                armorBonus = armorBonus,
+                armorCorrosion = Mathf.Min(corrosion.armor, armorBonus),
+                attackBonus = ranged ? actorDef.dexterity : actorDef.strength,
+                attackDamage = new DiceRoll(dice.count, dice.sides, dice.bonus + strengthBonus),
+                weaponIsMetal = weapon != null && weapon.isMetal,
+                weaponCorrosion = corrosion.weapon,
+                saveVitality = actorDef.vitality,
+                saveMind = actorDef.mind,
+                initiative = actorDef.dexterity,
+                usesAp = actorDef.usesAp,
+                currentAp = actorDef.usesAp ? 1 : 0,
                 moveRange = actorDef.moveRange,
                 attackRangeMultiplier = actorDef.attackRangeMultiplier,
                 skillIds = new List<string>(actorDef.startingSkillIds)
             };
         }
 
-        private static CombatantRuntime BuildEnemyRuntime(EnemyDefinition enemyDef)
+        public static CombatantRuntime BuildEnemyRuntime(EnemyDefinition enemyDef)
         {
             return new CombatantRuntime
             {
@@ -1414,14 +1388,20 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 isPlayerSide = false,
                 maxHp = enemyDef.hp,
                 currentHp = enemyDef.hp,
-                maxEp = 0,
-                currentEp = 0,
-                atk = enemyDef.atk,
-                def = enemyDef.def,
-                speed = enemyDef.speed,
+                baseArmorClass = enemyDef.armorClass,
+                attackBonus = enemyDef.attackBonus,
+                attackDamage = enemyDef.damage,
+                saveVitality = enemyDef.saveBonus,
+                saveMind = enemyDef.saveBonus,
+                morale = enemyDef.morale,
+                initiative = enemyDef.initiative,
+                corrodesArmor = enemyDef.corrodesArmor,
+                corrodesWeapons = enemyDef.corrodesWeapons,
+                immuneToCharm = enemyDef.immuneToCharm,
+                immuneToFear = enemyDef.immuneToFear,
+                immuneToSleep = enemyDef.immuneToSleep,
                 moveRange = enemyDef.moveRange,
                 attackRangeMultiplier = enemyDef.attackRangeMultiplier,
-                isHorror = enemyDef.isHorror,
                 skillIds = new List<string>(enemyDef.skillIds)
             };
         }
@@ -1527,6 +1507,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             foreach (var ally in _combatants.Where(c => c.isPlayerSide))
             {
                 PartyState.SetHp(ally.definitionId, ally.currentHp);
+                PartyState.SetCorrosion(ally.definitionId, ally.armorCorrosion, ally.weaponCorrosion);
             }
         }
 
@@ -1568,12 +1549,12 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
         private static int ComputeXpAwarded(List<CombatantRuntime> defeatedEnemies)
         {
-            // Placeholder formula: EnemyDefinition has no xpReward field yet (schema gap,
-            // out of this phase's scope) — derives a rough value from stats until it does.
+            // Placeholder formula: EnemyDefinition has no xpReward field yet — derives a rough value from its stat block
+            // (hit points + armor class + attack). Monsters that fled count too: they were beaten, just not slain.
             int total = 0;
             foreach (var enemy in defeatedEnemies)
             {
-                total += enemy.maxHp + enemy.atk + enemy.def;
+                total += enemy.maxHp + enemy.baseArmorClass + enemy.attackBonus;
             }
 
             return total;
@@ -1582,7 +1563,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         private static List<string> RollLoot(List<CombatantRuntime> defeatedEnemies)
         {
             var loot = new List<string>();
-            foreach (var enemy in defeatedEnemies)
+            foreach (var enemy in defeatedEnemies.Where(e => e.IsSlain)) // a fleeing monster takes its loot with it
             {
                 var enemyDef = DatabaseRegistry.GetEnemy(enemy.definitionId);
                 if (enemyDef == null)

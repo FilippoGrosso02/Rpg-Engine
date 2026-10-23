@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c2cf4c5f615e0941ae7b1c03f978ef9, type: 3}
+  m_Name: weapon_dagger
+  m_EditorClassIdentifier: Game.Data::Game.Data.Definitions.WeaponDefinition
+  id: weapon_dagger
+  displayName: Dagger
+  description: 
+  icon: {fileID: 0}
+  equipSlot: 0
+  damage:
+    count: 1
+    sides: 4
+    bonus: 0
+  isRanged: 1
+  addsStrengthModifier: 1
+  isMetal: 1
+  damageType: 1
+  basicAttackAnimations: []

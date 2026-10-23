@@ -22,5 +22,12 @@ namespace Game.Combat.Contracts
         /// <summary>Fires once per damaging hit with the full ATK/roll/DEF breakdown, so the UI
         /// can show the formula (and animate the die) instead of just the final HP change.</summary>
         event Action<DamageRollInfo> OnDamageRolled;
+
+        /// <summary>Fires when the enemy under the reticle, or the hit chance against it, changes. Only fires during a player turn.</summary>
+        event Action<AimReadout> OnAimChanged;
+
+        /// <summary>Fires the moment the player's action for this turn is committed (an attack, a spell, Guard or Flee), so the HUD can
+        /// lock its input until the next turn starts.</summary>
+        event Action OnPlayerActionCommitted;
     }
 }

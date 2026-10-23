@@ -7,16 +7,13 @@ namespace Game.Combat.TrailsBattle3D.Runtime
     /// Close third-person camera for battles, built on Cinemachine: one CinemachineCamera that orbits the
     /// follow target (mouse look comes from the CinemachineInputAxisController on the same object, which
     /// reads the legacy "Mouse X"/"Mouse Y" axes). The runner points it at whichever ally is acting and
-    /// simply leaves it there during enemy turns.
+    /// simply leaves it there during enemy turns. Q and E are not camera keys: they drive the battle menu.
     /// </summary>
     public class BattleCameraRig : MonoBehaviour
     {
         [SerializeField] private CinemachineCamera virtualCamera;
         [SerializeField] private CinemachineOrbitalFollow orbit;
         [SerializeField] private CinemachineInputAxisController lookInput;
-
-        [Tooltip("Degrees per second when rotating the camera with Q / E.")]
-        [SerializeField] private float keyboardRotateSpeed = 110f;
 
         public Transform Followed => virtualCamera != null ? virtualCamera.Follow : null;
 
@@ -62,7 +59,14 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             }
 
             orbit.HorizontalAxis.Value = Mathf.DeltaAngle(0f, yaw);
+
+            // Also flatten the pitch. From a high camera the centre ray reaches the floor a few metres ahead, well before it gets to an
+            // enemy across the arena, so the crosshair could never be on them at the start of a turn. The player can still pitch freely.
+            orbit.VerticalAxis.Value = Mathf.Min(orbit.VerticalAxis.Value, TurnStartPitchDegrees);
         }
+
+        /// <summary>The camera's pitch at the start of a turn (lower than the default so the crosshair can reach distant enemies).</summary>
+        public const float TurnStartPitchDegrees = 8f;
 
         private float CompositionYawOffset()
         {
@@ -84,20 +88,6 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             if (lookInput != null && lookInput.enabled != enabled)
             {
                 lookInput.enabled = enabled;
-            }
-        }
-
-        private void Update()
-        {
-            if (orbit == null)
-            {
-                return;
-            }
-
-            float turn = (Input.GetKey(KeyCode.E) ? 1f : 0f) - (Input.GetKey(KeyCode.Q) ? 1f : 0f);
-            if (turn != 0f)
-            {
-                orbit.HorizontalAxis.Value += turn * keyboardRotateSpeed * Time.deltaTime;
             }
         }
     }

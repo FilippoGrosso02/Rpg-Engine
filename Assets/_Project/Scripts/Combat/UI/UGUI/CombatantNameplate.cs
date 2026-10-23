@@ -12,8 +12,7 @@ namespace Game.Combat.UI.UGUI
     /// </summary>
     public class CombatantNameplate : MonoBehaviour
     {
-        [SerializeField] private Slider hpSlider;
-        [SerializeField] private Text nameLabel;
+        [SerializeField] private PixelText nameLabel;
         [Tooltip("World-space offset from the combatant's view origin that the nameplate is pinned to.")]
         [SerializeField] private Vector3 offset = new Vector3(0f, 2f, 0f);
 
@@ -35,6 +34,36 @@ namespace Game.Combat.UI.UGUI
             _canvasGroup.interactable = false;
         }
 
+        /// <summary>
+        /// Builds the plate: a one-line name over a 44x5 HP bar (dark frame, coloured fill). Anchored bottom-centre so the plate's
+        /// origin is the point it hangs from above the unit.
+        /// </summary>
+        public void Build(Color fillColor)
+        {
+            var rect = (RectTransform)transform;
+            rect.sizeDelta = new Vector2(60f, 16f);
+            rect.pivot = new Vector2(0.5f, 0f);
+
+            nameLabel = UiFactory.Text(transform, "Name", "", 0, 0, 60, 8, PixelText.Align.Center, UiFactory.Cream);
+
+            var frame = UiFactory.Box(transform, "BarFrame", UiFactory.Dim, 8, 10, 44, 6);
+            var back = UiFactory.Box(transform, "BarBack", new Color32(0x3A, 0x2A, 0x1E, 255), 9, 11, 42, 4);
+            var fill = UiFactory.Box(transform, "BarFill", fillColor, 9, 11, 42, 4);
+            frame.raycastTarget = false;
+            back.raycastTarget = false;
+            fill.raycastTarget = false;
+
+            // Left-anchored so shrinking the width drains the bar from the right.
+            fill.rectTransform.anchorMin = new Vector2(0f, 1f);
+            fill.rectTransform.anchorMax = new Vector2(0f, 1f);
+
+            _fillRect = fill.rectTransform;
+            _fillFullWidth = 42f;
+        }
+
+        [SerializeField] private RectTransform _fillRect;
+        [SerializeField] private float _fillFullWidth = 42f;
+
         public void Initialize(CombatantRuntime combatant, Camera trackingCamera)
         {
             _target = combatant.viewTransform;
@@ -51,9 +80,14 @@ namespace Game.Combat.UI.UGUI
 
         public void Refresh(CombatantRuntime combatant)
         {
-            if (hpSlider != null && combatant.maxHp > 0)
+            if (combatant.maxHp > 0)
             {
-                hpSlider.value = (float)combatant.currentHp / combatant.maxHp;
+                float fraction = Mathf.Clamp01((float)combatant.currentHp / combatant.maxHp);
+                if (_fillRect != null)
+                {
+                    // Whole pixels only: a 42 px bar at 7/22 HP is 13 px, never 13.4.
+                    _fillRect.sizeDelta = new Vector2(Mathf.Round(_fillFullWidth * fraction), _fillRect.sizeDelta.y);
+                }
             }
         }
 

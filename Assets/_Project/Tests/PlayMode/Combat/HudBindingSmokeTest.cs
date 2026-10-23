@@ -13,14 +13,14 @@ using UnityEditor;
 namespace Game.Combat.Tests.PlayMode
 {
     /// <summary>
-    /// Asserts the HUD's event wiring, not button presses: binding the real BattleHUD
-    /// prefab to a headless (autopilot) encounter should still update ActingUnitCard and
-    /// show EncounterResultPanel purely from ICombatEvents, with nothing clicking a menu.
+    /// Asserts the HUD's event wiring, not key presses: binding the real BattleHUD
+    /// prefab to a headless (autopilot) encounter should still update the hero card and
+    /// show EncounterResultPanel purely from ICombatEvents, with nothing pressing a key.
     /// </summary>
     public class HudBindingSmokeTest
     {
         private const float TimeoutSeconds = 30f;
-        private const string BattleHudPrefabPath = "Assets/_Project/Prefabs/Combat/UI/BattleHUD.prefab";
+        private const string BattleHudPrefabPath = "Assets/_Project/Prefabs/Combat/TrailsBattle3D/UI/BattleHUD.prefab";
 
         [UnitySetUp]
         public IEnumerator SetUp()
@@ -57,7 +57,7 @@ namespace Game.Combat.Tests.PlayMode
             // turn-by-turn (unlike the old flat power-based formula). Rather than assume any
             // particular fight length, this test only relies on what's actually guaranteed:
             // every ally gets an OnTurnStarted at least once, which is what ActingUnitCard
-            // reacts to. ActingUnitCard only ever shows whoever is *currently* acting (not a
+            // reacts to. the hero card only ever shows whoever is *currently* acting (not a
             // per-combatant history), so the displayed HP is captured synchronously inside
             // this same handler — BattleHudRoot's own OnTurnStarted subscription (from
             // hud.Bind, above) already ran by the time this one fires, since delegates invoke
@@ -74,7 +74,7 @@ namespace Game.Combat.Tests.PlayMode
                     // keeps mutating for the rest of the encounter, so a later read would no
                     // longer reflect what ActingUnitCard displayed at this exact moment.
                     observedActualHp = combatant.currentHp;
-                    observedDisplayedHp = hud.ActingUnitCard.DisplayedHp;
+                    observedDisplayedHp = hud.HeroCard.DisplayedHp;
                 }
             };
 
@@ -103,7 +103,7 @@ namespace Game.Combat.Tests.PlayMode
             Assert.AreEqual(
                 observedActualHp,
                 observedDisplayedHp,
-                "Expected ActingUnitCard's displayed HP to match the combatant's real HP at the moment its turn started.");
+                "Expected the hero card's displayed HP to match the combatant's real HP at the moment its turn started.");
 
             Assert.IsTrue(resultPanelSeenVisible, "Expected EncounterResultPanel to be visible when OnEncounterEnded fired.");
 

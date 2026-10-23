@@ -1,0 +1,123 @@
+using Game.Data.Definitions;
+using Game.Data.Rules;
+using NUnit.Framework;
+
+namespace Game.Combat.Tests.EditMode
+{
+    /// <summary>
+    /// Pins the d12 rules to the template sheets: every number here (HP, AC, the 92% / 83% / 33% matchup percentages) is copied
+    /// from the "Template Heroes &amp; Monsters" notes, so a change to a formula that would silently rebalance the game fails here.
+    /// </summary>
+    public class OsrRulesTests
+    {
+        [TestCase(4, -1)]
+        [TestCase(5, -1)]
+        [TestCase(6, 0)]
+        [TestCase(7, 0)]
+        [TestCase(8, 1)]
+        [TestCase(9, 1)]
+        [TestCase(10, 2)]
+        public void Modifier_IsFloorOfScoreMinusSixOverTwo(int score, int expected)
+        {
+            Assert.AreEqual(expected, OsrRules.Modifier(score));
+        }
+
+        [Test]
+        public void MaxHitPoints_MatchTheTemplateHeroes()
+        {
+            Assert.AreEqual(9, OsrRules.MaxHitPoints(8, vitality: 8), "Warrior: d8 + 1");
+            Assert.AreEqual(8, OsrRules.MaxHitPoints(8, vitality: 7), "Ranger: d8 + 0");
+            Assert.AreEqual(4, OsrRules.MaxHitPoints(4, vitality: 7), "Wizard: d4 + 0");
+        }
+
+        [Test]
+        public void ArmorClass_MatchesTheTemplateHeroes()
+        {
+            Assert.AreEqual(14, OsrRules.ArmorClass(armorBonus: 7 + 1, dexterity: 6), "Warrior: chain 7 + shield 1");
+            Assert.AreEqual(12, OsrRules.ArmorClass(armorBonus: 4, dexterity: 10), "Ranger: leather 4, DEX +2");
+            Assert.AreEqual(6, OsrRules.ArmorClass(armorBonus: 0, dexterity: 7), "Wizard: no armor");
+        }
+
+        [Test]
+        public void AttackHits_NaturalOneAlwaysMisses_NaturalTwelveAlwaysHits()
+        {
+            Assert.IsFalse(OsrRules.AttackHits(1, attackBonus: 20, armorClass: 1));
+            Assert.IsTrue(OsrRules.AttackHits(12, attackBonus: -5, armorClass: 30));
+        }
+
+        [Test]
+        public void AttackHits_OtherwiseNeedsRollPlusBonusToReachArmorClass()
+        {
+            Assert.IsTrue(OsrRules.AttackHits(5, 5, 10));
+            Assert.IsFalse(OsrRules.AttackHits(4, 5, 10));
+        }
+
+        [Test]
+        public void SavePasses_NeedsRollPlusScoreOfTwelve()
+        {
+            Assert.IsTrue(OsrRules.SavePasses(4, 8));
+            Assert.IsFalse(OsrRules.SavePasses(3, 8));
+        }
+
+        private static int HitPercent(int attackBonus, int armorClass)
+        {
+            int hits = 0;
+            for (int roll = 1; roll <= OsrRules.DieSides; roll++)
+            {
+                if (OsrRules.AttackHits(roll, attackBonus, armorClass))
+                {
+                    hits++;
+                }
+            }
+
+            return (int)System.Math.Round(hits * 100f / OsrRules.DieSides);
+        }
+
+        // "Monster hits vs. hero AC" table.
+        [TestCase(5, 14, 33)] // Goblin vs Warrior
+        [TestCase(5, 12, 50)] // Goblin vs Ranger
+        [TestCase(5, 6, 92)]  // Goblin vs Wizard
+        [TestCase(8, 14, 58)] // Ogre vs Warrior
+        [TestCase(8, 12, 75)] // Ogre vs Ranger
+        [TestCase(8, 6, 92)]  // Ogre vs Wizard
+        [TestCase(4, 14, 25)] // Slime vs Warrior
+        [TestCase(4, 12, 42)] // Slime vs Ranger
+        [TestCase(4, 6, 92)]  // Slime vs Wizard
+        public void MonsterHitChances_MatchTheMatchupTable(int attack, int heroAc, int expectedPercent)
+        {
+            Assert.AreEqual(expectedPercent, HitPercent(attack, heroAc));
+        }
+
+        // "Hero hits vs. monster AC" table.
+        [TestCase(10, 9, 92)]  // Warrior vs Goblin
+        [TestCase(10, 13, 83)] // Warrior vs Ogre
+        [TestCase(10, 7, 92)]  // Warrior vs Slime
+        [TestCase(7, 9, 92)]   // Wizard (thrown dagger) vs Goblin
+        [TestCase(7, 13, 58)]  // Wizard vs Ogre
+        [TestCase(7, 7, 92)]   // Wizard vs Slime
+        public void HeroHitChances_MatchTheMatchupTable(int attack, int monsterAc, int expectedPercent)
+        {
+            Assert.AreEqual(expectedPercent, HitPercent(attack, monsterAc));
+        }
+
+        [Test]
+        public void DiceRoll_ToStringReadsLikeTheSheet()
+        {
+            Assert.AreEqual("d8+2", new DiceRoll(1, 8, 2).ToString());
+            Assert.AreEqual("2d6", new DiceRoll(2, 6).ToString());
+            Assert.AreEqual("d4-1", new DiceRoll(1, 4, -1).ToString());
+        }
+
+        [Test]
+        public void DiceRoll_RollSumsEachDieAndAddsTheBonus()
+        {
+            var rng = new System.Random(7);
+            var dice = new DiceRoll(2, 6, 1);
+            for (int i = 0; i < 200; i++)
+            {
+                int roll = dice.Roll(rng);
+                Assert.That(roll, Is.InRange(dice.Min, dice.Max));
+            }
+        }
+    }
+}

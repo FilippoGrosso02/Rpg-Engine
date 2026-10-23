@@ -16,10 +16,19 @@ namespace Game.Combat.Contracts
         ContinueAfterResult,
 
         /// <summary>
-        /// Backs out of targeting mode (after Attack/Craft was chosen but before a target
-        /// was clicked) without ending the turn. Lets the UI give the player a way out of a
-        /// state that previously had no visible exit besides guessing to click an enemy.
+        /// Clears the selected spell (back to the plain Basic Attack) without ending the turn.
         /// </summary>
-        CancelCommand
+        CancelCommand,
+        /// <summary>
+        /// The player confirmed fleeing (Tab, then Enter). Ends the encounter as an escape: no victory, no defeat.
+        /// Whether fleeing should ever fail is game logic; today it always succeeds.
+        /// </summary>
+        Flee,
+        /// <summary>
+        /// A UI modal (the flee prompt) is open: the runner must ignore the commit click/Space and free movement until
+        /// <see cref="ResumeActions"/>, otherwise the click that dismisses a prompt could also fire an attack.
+        /// </summary>
+        SuspendActions,
+        ResumeActions
     }
 }

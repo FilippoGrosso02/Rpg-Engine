@@ -3,18 +3,20 @@ using Game.Data.Enums;
 
 namespace Game.Data.Definitions
 {
+    /// <summary>
+    /// A Basic Attack or a spell. The Basic Attack (first skill on every combatant) uses the attacker's own weapon or
+    /// stat block; a spell carries its own damage dice, an AP cost equal to its level, and optionally a save.
+    /// </summary>
     [CreateAssetMenu(fileName = "NewSkill", menuName = "Database/Skill")]
     public class SkillDefinition : GameDefinition
     {
         [TextArea] public string description;
         public Sprite icon;
-
         public ActionCost actionCost;
         public TargetType targetType;
         public int range;
 
         // --- Area of effect (used when targetType is AreaCircle / AreaCone / AreaLine; 0 = use the default) ---
-
         /// <summary>Circle: radius (default 3.5). Cone / Line: length from the caster (defaults 6 / 8).</summary>
         public float aoeSize;
 
@@ -24,59 +26,34 @@ namespace Game.Data.Definitions
         /// <summary>Line only: full width (default 2).</summary>
         public float aoeWidth;
 
-        public int resourceCost; // MP — legacy, unread by Duelwright combat (AP replaces it as the combat resource)
-
-        public int power; // legacy, unread by Duelwright combat — see the fields below instead
         public DamageType damageType;
 
-        public string statusEffectId; // nullable: empty = none
-        [Range(0f, 1f)] public float statusEffectChance; // only read if statusEffectId is set
-
-        // --- Duelwright fields ---
-
-        /// <summary>AP cost to use this as a Craft. Basic Attack (skillIds[0]) costs 0 AP always.</summary>
+        // --- Rules ---
+        /// <summary>AP spent to cast this (a spell's level). The Basic Attack costs 0.</summary>
         public int apCost;
 
-        /// <summary>True for pure utility/debuff/forced-target cards (e.g. Curse of Dread, Hex
-        /// of Weakness, Noble Challenge) — skips ResolveDamage and the automatic on-hit fear
-        /// gain entirely; only fearDelta/statusEffectId/bespoke effects apply.</summary>
-        public bool skipDamage;
+        /// <summary>Spell level, shown in the spell list. Informational: AP cost is <see cref="apCost"/>.</summary>
+        public int spellLevel;
 
-        /// <summary>Flat damage added on top of the die roll (or the whole damage, when
-        /// skipDiceRoll is set) — e.g. Blood for Power's "+4".</summary>
-        public int bonusPower;
+        /// <summary>True for the Basic Attack: damage comes from the attacker's weapon or stat block, not from <see cref="damage"/>.</summary>
+        public bool usesWeaponDamage;
 
-        /// <summary>Damage ignores DEF entirely (e.g. Blood for Power).</summary>
-        public bool ignoresDef;
+        /// <summary>Spell damage dice. Count 0 = no damage (a spell that only applies a status).</summary>
+        public DiceRoll damage;
 
-        /// <summary>Damage = effective ATK + bonusPower, no die roll at all (e.g. Blood for Power).</summary>
-        public bool skipDiceRoll;
+        /// <summary>Magic Missile: skips the attack roll entirely and always hits.</summary>
+        public bool autoHit;
 
-        /// <summary>Extra d6 added to the roll on top of the usual one (e.g. Point-Blank Blast = 1).</summary>
-        public int extraDiceCount;
+        /// <summary>The target may roll this save (d12 + score >= 12) to resist.</summary>
+        public SaveType saveType;
 
-        /// <summary>Natural roll needed to crit; 0 means the default of 6 (e.g. Quick Draw sets 5).</summary>
-        public int critThreshold;
+        /// <summary>On a passed save the target takes half damage (Fireball). If false, a passed save negates the spell (Web).</summary>
+        public bool halfDamageOnSave;
 
-        /// <summary>Damage the user takes for using this card (e.g. Blood for Power's self-3).</summary>
-        public int selfDamage;
-
-        /// <summary>Extra fear applied to the target beyond the automatic on-hit gain (or, when
-        /// skipDamage is set, the card's entire fear effect — negative reduces, e.g. Calming Presence).</summary>
-        public int fearDelta;
-
-        /// <summary>True for heal cards (e.g. Mend) — rolls 1d6+healBonus and adds to the
-        /// target's HP instead of dealing damage.</summary>
-        public bool isHeal;
-        public int healBonus;
-
-        /// <summary>True for revive cards: targets a defeated ally (SingleAlly) and brings them back
-        /// to <see cref="reviveHp"/> HP with fear and statuses cleared. They act again from the next round.</summary>
-        public bool isRevive;
-        public int reviveHp = 1;
+        public string statusEffectId; // nullable: empty = none
+        [Range(0f, 1f)] public float statusEffectChance = 1f; // only read if statusEffectId is set
 
         // --- Animation ---
-
         /// <summary>Custom animation for this skill. Empty clip = fall back to the user's
         /// AnimationSet (basic attacks use the weapon's / set's basic-attack list instead).</summary>
         public AnimationAction animation = new AnimationAction();

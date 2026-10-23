@@ -9,101 +9,384 @@ using UnityEngine;
 namespace Game.Combat.Tests.EditMode
 {
     /// <summary>
-    /// Duelwright's ActionResolver rolls real dice, so these tests inject a seeded
-    /// System.Random (ResolveDamage's optional rng param) to keep assertions exact instead of
-    /// asserting on live UnityEngine.Random.
+    /// The d12 resolver rolls real dice, so these tests inject a scripted System.Random: every call to Next() returns the next
+    /// queued value. ResolveAttack draws in a fixed order — (1) the d12 attack roll, unless the spell auto-hits or is save-based,
+    /// (2) each damage die, (3) the d12 save roll — so a test can say exactly which roll is which.
     /// </summary>
     public class ActionResolverTests
     {
-        private static CombatantRuntime MakeCombatant(bool isPlayerSide, int atk, int def, Vector3 position)
+        private class ScriptedRolls : System.Random
+        {
+            private readonly Queue<int> _rolls;
+
+            public ScriptedRolls(params int[] rolls) => _rolls = new Queue<int>(rolls);
+
+            public int Remaining => _rolls.Count;
+
+            public override int Next(int minValue, int maxValue)
+            {
+                Assert.IsTrue(_rolls.Count > 0, "The resolver rolled more dice than the test scripted.");
+                return _rolls.Dequeue();
+            }
+        }
+
+        private static CombatantRuntime MakeCombatant(bool isPlayerSide, Vector3 position = default)
         {
             return new CombatantRuntime
             {
                 isPlayerSide = isPlayerSide,
                 maxHp = 20,
                 currentHp = 20,
-                atk = atk,
-                def = def,
                 position = position
             };
         }
 
-        private static SkillDefinition MakeBasicAttackSkill()
+        /// <summary>A Warrior: attack +10, sword d8+2.</summary>
+        private static CombatantRuntime MakeWarrior()
+        {
+            var warrior = MakeCombatant(true);
+            warrior.attackBonus = 10;
+            warrior.attackDamage = new DiceRoll(1, 8, 2);
+            warrior.weaponIsMetal = true;
+            return warrior;
+        }
+
+        private static CombatantRuntime MakeMonster(int armorClass, int saveBonus = 5)
+        {
+            var monster = MakeCombatant(false);
+            monster.baseArmorClass = armorClass;
+            monster.saveVitality = saveBonus;
+            monster.saveMind = saveBonus;
+            return monster;
+        }
+
+        private static SkillDefinition MakeBasicAttack()
         {
             var skill = ScriptableObject.CreateInstance<SkillDefinition>();
             skill.targetType = TargetType.SingleEnemy;
+            skill.usesWeaponDamage = true;
             return skill;
         }
 
-        /// <summary>A System.Random stub that always returns a fixed d6 roll.</summary>
-        private class FixedRoll : System.Random
+        private static SkillDefinition MakeSpell(string name, DiceRoll damage, bool autoHit = false, SaveType save = SaveType.None, bool half = false)
         {
-            private readonly int _roll;
-            public FixedRoll(int roll) => _roll = roll;
-            public override int Next(int minValue, int maxValue) => _roll;
+            var spell = ScriptableObject.CreateInstance<SkillDefinition>();
+            spell.displayName = name;
+            spell.targetType = TargetType.SingleEnemy;
+            spell.damage = damage;
+            spell.autoHit = autoHit;
+            spell.saveType = save;
+            spell.halfDamageOnSave = half;
+            return spell;
         }
 
+        // ---------------------------------------------------------------- weapon attacks
+
         [Test]
-        public void ResolveDamage_NonCritRoll_UsesRollPlusAtkMinusDef_WithMinimumOfOne()
+        public void ResolveAttack_RollPlusBonusReachingArmorClassHits_AndRollsWeaponDamagePlusModifier()
         {
-            var skill = MakeBasicAttackSkill();
-            var attacker = MakeCombatant(true, atk: 5, def: 0, Vector3.zero);
-            var target = MakeCombatant(false, atk: 0, def: 3, Vector3.zero);
+            var skill = MakeBasicAttack();
+            var rolls = new ScriptedRolls(5, 6); // d12 attack = 5 (+10 = 15 vs AC 9), then d8 = 6
 
-            var info = ActionResolver.ResolveDamage(attacker, target, skill, new FixedRoll(4));
+            var info = ActionResolver.ResolveAttack(MakeWarrior(), MakeMonster(armorClass: 9), skill, rolls);
 
-            Assert.AreEqual(6, info.damage); // 4 + 5 - 3
-            Assert.AreEqual(4, info.diceRoll);
-            Assert.IsFalse(info.wasCrit);
+            Assert.IsTrue(info.hit);
+            Assert.AreEqual(5, info.attackRoll);
+            Assert.AreEqual(9, info.targetArmorClass);
+            Assert.AreEqual(8, info.damage); // d8 (6) + 2
+            Assert.AreEqual("d8+2", info.damageText);
+            Assert.AreEqual(0, rolls.Remaining);
 
             Object.DestroyImmediate(skill);
         }
 
         [Test]
-        public void ResolveDamage_NeverGoesBelowOne()
+        public void ResolveAttack_RollPlusBonusBelowArmorClassMisses_AndDealsNothing()
         {
-            var skill = MakeBasicAttackSkill();
-            var attacker = MakeCombatant(true, atk: 0, def: 0, Vector3.zero);
-            var target = MakeCombatant(false, atk: 0, def: 999, Vector3.zero);
+            var skill = MakeBasicAttack();
+            var attacker = MakeWarrior();
+            attacker.attackBonus = 5;
+            var rolls = new ScriptedRolls(8); // 8 + 5 = 13 < AC 14: a miss, so no damage die is rolled
 
-            var info = ActionResolver.ResolveDamage(attacker, target, skill, new FixedRoll(1));
+            var info = ActionResolver.ResolveAttack(attacker, MakeMonster(armorClass: 14), skill, rolls);
 
-            Assert.AreEqual(1, info.damage);
+            Assert.IsFalse(info.hit);
+            Assert.AreEqual(0, info.damage);
+            Assert.AreEqual(0, rolls.Remaining);
 
             Object.DestroyImmediate(skill);
         }
 
         [Test]
-        public void ResolveDamage_NaturalSix_CritsAndIgnoresDef()
+        public void ResolveAttack_NaturalOneMissesEvenWhenTheBonusBeatsArmorClass()
         {
-            var skill = MakeBasicAttackSkill();
-            var attacker = MakeCombatant(true, atk: 5, def: 0, Vector3.zero);
-            var target = MakeCombatant(false, atk: 0, def: 999, Vector3.zero);
+            var skill = MakeBasicAttack();
 
-            var info = ActionResolver.ResolveDamage(attacker, target, skill, new FixedRoll(6));
+            var info = ActionResolver.ResolveAttack(MakeWarrior(), MakeMonster(armorClass: 5), skill, new ScriptedRolls(1));
 
-            Assert.AreEqual(11, info.damage); // atk 5 + 6, DEF ignored entirely
-            Assert.IsTrue(info.wasCrit);
-            Assert.IsTrue(info.defIgnored);
+            Assert.IsFalse(info.hit);
+            Assert.IsTrue(info.naturalOne);
 
             Object.DestroyImmediate(skill);
         }
 
         [Test]
-        public void ResolveDamage_TargetGuarding_AddsTwoEffectiveDef()
+        public void ResolveAttack_NaturalTwelveHitsEvenWhenTheBonusCannotReachArmorClass()
         {
-            var skill = MakeBasicAttackSkill();
-            var attacker = MakeCombatant(true, atk: 5, def: 0, Vector3.zero);
-            var target = MakeCombatant(false, atk: 0, def: 3, Vector3.zero);
+            var skill = MakeBasicAttack();
+            var attacker = MakeWarrior();
+            attacker.attackBonus = 0;
+
+            var info = ActionResolver.ResolveAttack(attacker, MakeMonster(armorClass: 25), skill, new ScriptedRolls(12, 3));
+
+            Assert.IsTrue(info.hit);
+            Assert.IsTrue(info.naturalTwelve);
+            Assert.AreEqual(5, info.damage); // d8 (3) + 2
+
+            Object.DestroyImmediate(skill);
+        }
+
+        [Test]
+        public void ResolveAttack_GuardAddsTwoToArmorClass()
+        {
+            var skill = MakeBasicAttack();
+            var attacker = MakeWarrior();
+            attacker.attackBonus = 5;
+            var target = MakeMonster(armorClass: 12);
+
+            // 7 + 5 = 12 beats AC 12 ...
+            Assert.IsTrue(ActionResolver.ResolveAttack(attacker, target, skill, new ScriptedRolls(7, 1)).hit);
+
+            // ... but not once the target is guarding (AC 14).
             target.guarding = true;
-
-            var info = ActionResolver.ResolveDamage(attacker, target, skill, new FixedRoll(4));
-
-            Assert.AreEqual(4, info.damage); // 4 + 5 - (3 + 2 guard bonus)
-            Assert.AreEqual(5, info.effectiveDef);
+            Assert.IsFalse(ActionResolver.ResolveAttack(attacker, target, skill, new ScriptedRolls(7)).hit);
 
             Object.DestroyImmediate(skill);
         }
+
+        [Test]
+        public void ResolveAttack_CorrodedWeaponLosesDamage_ButAlwaysDoesAtLeastOne()
+        {
+            var skill = MakeBasicAttack();
+            var attacker = MakeWarrior();
+            attacker.attackDamage = new DiceRoll(1, 4, 0);
+            attacker.weaponCorrosion = 2;
+
+            var info = ActionResolver.ResolveAttack(attacker, MakeMonster(armorClass: 5), skill, new ScriptedRolls(10, 3));
+            Assert.AreEqual(1, info.damage); // 3 - 2
+            Assert.AreEqual(2, info.corrosionPenalty);
+
+            attacker.weaponCorrosion = 9;
+            info = ActionResolver.ResolveAttack(attacker, MakeMonster(armorClass: 5), skill, new ScriptedRolls(10, 1));
+            Assert.AreEqual(1, info.damage, "A hit always does at least 1 damage.");
+
+            Object.DestroyImmediate(skill);
+        }
+
+        // ---------------------------------------------------------------- spells
+
+        [Test]
+        public void ResolveAttack_AutoHitSpell_SkipsTheAttackRoll()
+        {
+            var magicMissile = MakeSpell("Magic Missile", new DiceRoll(1, 6), autoHit: true);
+            var rolls = new ScriptedRolls(4); // only the d6
+
+            var info = ActionResolver.ResolveAttack(MakeCombatant(true), MakeMonster(armorClass: 99), magicMissile, rolls);
+
+            Assert.IsTrue(info.hit);
+            Assert.IsTrue(info.autoHit);
+            Assert.AreEqual(4, info.damage);
+            Assert.AreEqual("Magic Missile", info.spellName);
+
+            Object.DestroyImmediate(magicMissile);
+        }
+
+        [Test]
+        public void ResolveAttack_NegatingSave_FailedSaveKeepsTheEffect_PassedSaveResistsIt()
+        {
+            var web = MakeSpell("Web", DiceRoll.None, save: SaveType.Vitality);
+            var target = MakeMonster(armorClass: 9, saveBonus: 7);
+
+            var failed = ActionResolver.ResolveAttack(MakeCombatant(true), target, web, new ScriptedRolls(4)); // 4 + 7 = 11 < 12
+            Assert.IsTrue(failed.hasSave);
+            Assert.IsFalse(failed.savePassed);
+            Assert.IsFalse(failed.effectNegated);
+
+            var passed = ActionResolver.ResolveAttack(MakeCombatant(true), target, web, new ScriptedRolls(5)); // 5 + 7 = 12
+            Assert.IsTrue(passed.savePassed);
+            Assert.IsTrue(passed.effectNegated);
+
+            Object.DestroyImmediate(web);
+        }
+
+        [Test]
+        public void ResolveAttack_HalvingSave_FullDamageOnFail_HalfOnPass()
+        {
+            var fireball = MakeSpell("Fireball", new DiceRoll(2, 6), save: SaveType.Vitality, half: true);
+            var target = MakeMonster(armorClass: 9, saveBonus: 8);
+
+            var failed = ActionResolver.ResolveAttack(MakeCombatant(true), target, fireball, new ScriptedRolls(4, 5, 3)); // 2d6 = 9, save 3 + 8 = 11
+            Assert.AreEqual(9, failed.damage);
+            Assert.IsFalse(failed.halved);
+
+            var saved = ActionResolver.ResolveAttack(MakeCombatant(true), target, fireball, new ScriptedRolls(4, 5, 4)); // save 4 + 8 = 12
+            Assert.AreEqual(4, saved.damage); // 9 / 2, rounded down
+            Assert.IsTrue(saved.halved);
+            Assert.IsFalse(saved.effectNegated);
+
+            Object.DestroyImmediate(fireball);
+        }
+
+        // ---------------------------------------------------------------- acid
+
+        [Test]
+        public void ApplyAcidEffects_AcidicHitCorrodesArmorByOne_UntilNoArmorIsLeft()
+        {
+            var slime = MakeMonster(armorClass: 7);
+            slime.corrodesArmor = true;
+            var hero = MakeCombatant(true);
+            hero.baseArmorClass = 14;
+            hero.armorBonus = 2;
+            var hit = new DamageRollInfo { attacker = slime, target = hero, hit = true };
+
+            ActionResolver.ApplyAcidEffects(hit);
+            Assert.AreEqual(1, hero.armorCorrosion);
+            Assert.AreEqual(13, hero.ArmorClass);
+
+            ActionResolver.ApplyAcidEffects(hit);
+            ActionResolver.ApplyAcidEffects(hit);
+            Assert.AreEqual(2, hero.armorCorrosion, "Armor can only corrode as far as the armor worn.");
+        }
+
+        [Test]
+        public void ApplyAcidEffects_UnarmoredTargetIsUnaffected_AndMissesDoNothing()
+        {
+            var slime = MakeMonster(armorClass: 7);
+            slime.corrodesArmor = true;
+            var wizard = MakeCombatant(true);
+            wizard.baseArmorClass = 6;
+
+            ActionResolver.ApplyAcidEffects(new DamageRollInfo { attacker = slime, target = wizard, hit = true });
+            Assert.AreEqual(0, wizard.armorCorrosion);
+
+            wizard.armorBonus = 4;
+            ActionResolver.ApplyAcidEffects(new DamageRollInfo { attacker = slime, target = wizard, hit = false });
+            Assert.AreEqual(0, wizard.armorCorrosion);
+        }
+
+        [Test]
+        public void ApplyAcidEffects_MetalWeaponHittingASlimeLosesDamage_ButABowDoesNot()
+        {
+            var slime = MakeMonster(armorClass: 7);
+            slime.corrodesWeapons = true;
+
+            var warrior = MakeWarrior();
+            ActionResolver.ApplyAcidEffects(new DamageRollInfo { attacker = warrior, target = slime, hit = true });
+            ActionResolver.ApplyAcidEffects(new DamageRollInfo { attacker = warrior, target = slime, hit = true });
+            Assert.AreEqual(2, warrior.weaponCorrosion, "Cumulative.");
+
+            var ranger = MakeCombatant(true);
+            ranger.weaponIsMetal = false;
+            ActionResolver.ApplyAcidEffects(new DamageRollInfo { attacker = ranger, target = slime, hit = true });
+            Assert.AreEqual(0, ranger.weaponCorrosion);
+        }
+
+        [Test]
+        public void ApplyAcidEffects_SpellsNeverCorrode()
+        {
+            var slime = MakeMonster(armorClass: 7);
+            slime.corrodesWeapons = true;
+            var wizard = MakeCombatant(true);
+            wizard.weaponIsMetal = true;
+
+            ActionResolver.ApplyAcidEffects(new DamageRollInfo { attacker = wizard, target = slime, hit = true, spellName = "Magic Missile" });
+
+            Assert.AreEqual(0, wizard.weaponCorrosion);
+        }
+
+        // ---------------------------------------------------------------- guard and spell points
+
+        [Test]
+        public void ApplyGuard_GivesTwoArmorClass_AndOnlyCastersBankTheExtraAp()
+        {
+            var fighter = MakeCombatant(true);
+            fighter.baseArmorClass = 14;
+            ActionResolver.ApplyGuard(fighter);
+            Assert.IsTrue(fighter.guarding);
+            Assert.IsFalse(fighter.pendingGuardApBonus);
+            Assert.AreEqual(16, fighter.ArmorClass);
+
+            var wizard = MakeCombatant(true);
+            wizard.usesAp = true;
+            ActionResolver.ApplyGuard(wizard);
+            Assert.IsTrue(wizard.pendingGuardApBonus);
+        }
+
+        [Test]
+        public void BeginTurn_EndsGuard()
+        {
+            var fighter = MakeCombatant(true);
+            fighter.baseArmorClass = 14;
+            ActionResolver.ApplyGuard(fighter);
+
+            ActionResolver.BeginTurn(fighter);
+
+            Assert.IsFalse(fighter.guarding);
+            Assert.AreEqual(14, fighter.ArmorClass);
+        }
+
+        [Test]
+        public void BeginTurn_CasterStartsWithOneAp_AndGainsOnePerTurnFromTheSecond()
+        {
+            var wizard = MakeCombatant(true);
+            wizard.usesAp = true;
+            wizard.currentAp = 1;
+
+            ActionResolver.BeginTurn(wizard);
+            Assert.AreEqual(1, wizard.currentAp, "First turn: the starting 1 AP.");
+
+            ActionResolver.BeginTurn(wizard);
+            Assert.AreEqual(2, wizard.currentAp);
+
+            ActionResolver.BeginTurn(wizard);
+            Assert.AreEqual(3, wizard.currentAp, "Unspent AP accumulates, so Fireball (3) is castable on the third turn.");
+        }
+
+        [Test]
+        public void BeginTurn_GuardingLastTurnEarnsOneExtraAp()
+        {
+            var wizard = MakeCombatant(true);
+            wizard.usesAp = true;
+            wizard.currentAp = 1;
+            ActionResolver.BeginTurn(wizard);
+
+            ActionResolver.ApplyGuard(wizard);
+            ActionResolver.BeginTurn(wizard);
+
+            Assert.AreEqual(3, wizard.currentAp); // 1 + 1 regular + 1 for guarding
+            Assert.IsFalse(wizard.pendingGuardApBonus, "The bonus is spent once.");
+        }
+
+        [Test]
+        public void BeginTurn_NonCasterNeverGainsAp()
+        {
+            var fighter = MakeCombatant(true);
+            ActionResolver.BeginTurn(fighter);
+            ActionResolver.BeginTurn(fighter);
+
+            Assert.AreEqual(0, fighter.currentAp);
+        }
+
+        [Test]
+        public void RollInitiative_IsAD12PlusTheInitiativeBonus()
+        {
+            var ranger = MakeCombatant(true);
+            ranger.initiative = 10;
+
+            Assert.AreEqual(15, ActionResolver.RollInitiative(ranger, new ScriptedRolls(5)));
+        }
+
+        // ---------------------------------------------------------------- targeting and areas
 
         [Test]
         public void ResolveTargets_AreaCircleSkill_HitsOnlyEnemiesWithinRadius()
@@ -111,10 +394,10 @@ namespace Game.Combat.Tests.EditMode
             var skill = ScriptableObject.CreateInstance<SkillDefinition>();
             skill.targetType = TargetType.AreaCircle;
 
-            var user = MakeCombatant(true, 5, 0, Vector3.zero);
-            var nearEnemy = MakeCombatant(false, 0, 0, new Vector3(1f, 0f, 0f));
-            var farEnemy = MakeCombatant(false, 0, 0, new Vector3(50f, 0f, 0f));
-            var ally = MakeCombatant(true, 0, 0, new Vector3(1f, 0f, 0f));
+            var user = MakeCombatant(true, Vector3.zero);
+            var nearEnemy = MakeCombatant(false, new Vector3(1f, 0f, 0f));
+            var farEnemy = MakeCombatant(false, new Vector3(50f, 0f, 0f));
+            var ally = MakeCombatant(true, new Vector3(1f, 0f, 0f));
 
             var all = new List<CombatantRuntime> { user, nearEnemy, farEnemy, ally };
 
@@ -134,10 +417,10 @@ namespace Game.Combat.Tests.EditMode
             skill.targetType = TargetType.AreaCircle;
             skill.aoeSize = 8f;
 
-            var user = MakeCombatant(true, 5, 0, Vector3.zero);
-            var target = MakeCombatant(false, 0, 0, new Vector3(0f, 0f, 10f));
-            var edgeEnemy = MakeCombatant(false, 0, 0, new Vector3(6f, 0f, 10f));   // 6 from the target: inside radius 8, outside the default 3.5
-            var tooFar = MakeCombatant(false, 0, 0, new Vector3(9f, 0f, 10f));
+            var user = MakeCombatant(true, Vector3.zero);
+            var target = MakeCombatant(false, new Vector3(0f, 0f, 10f));
+            var edgeEnemy = MakeCombatant(false, new Vector3(6f, 0f, 10f));   // 6 from the target: inside radius 8, outside the default 3.5
+            var tooFar = MakeCombatant(false, new Vector3(9f, 0f, 10f));
 
             var targets = ActionResolver.ResolveTargets(skill, user, target, new List<CombatantRuntime> { user, target, edgeEnemy, tooFar });
 
@@ -155,12 +438,12 @@ namespace Game.Combat.Tests.EditMode
             skill.aoeSize = 8f;
             skill.aoeAngle = 60f;
 
-            var user = MakeCombatant(true, 5, 0, Vector3.zero);
-            var target = MakeCombatant(false, 0, 0, new Vector3(0f, 0f, 5f));
-            var inWedge = MakeCombatant(false, 0, 0, new Vector3(1.5f, 0f, 7f));
-            var offToTheSide = MakeCombatant(false, 0, 0, new Vector3(6f, 0f, 3f));
-            var behind = MakeCombatant(false, 0, 0, new Vector3(0f, 0f, -3f));
-            var beyondLength = MakeCombatant(false, 0, 0, new Vector3(0f, 0f, 9f));
+            var user = MakeCombatant(true, Vector3.zero);
+            var target = MakeCombatant(false, new Vector3(0f, 0f, 5f));
+            var inWedge = MakeCombatant(false, new Vector3(1.5f, 0f, 7f));
+            var offToTheSide = MakeCombatant(false, new Vector3(6f, 0f, 3f));
+            var behind = MakeCombatant(false, new Vector3(0f, 0f, -3f));
+            var beyondLength = MakeCombatant(false, new Vector3(0f, 0f, 9f));
 
             var all = new List<CombatantRuntime> { user, target, inWedge, offToTheSide, behind, beyondLength };
             var targets = ActionResolver.ResolveTargets(skill, user, target, all);
@@ -182,10 +465,10 @@ namespace Game.Combat.Tests.EditMode
             skill.aoeSize = 10f;
             skill.aoeWidth = 2f;
 
-            var user = MakeCombatant(true, 5, 0, Vector3.zero);
-            var target = MakeCombatant(false, 0, 0, new Vector3(4f, 0f, 0f)); // line points along +X
-            var behindTarget = MakeCombatant(false, 0, 0, new Vector3(9f, 0.2f, 0.5f));
-            var tooWide = MakeCombatant(false, 0, 0, new Vector3(5f, 0f, 2f));
+            var user = MakeCombatant(true, Vector3.zero);
+            var target = MakeCombatant(false, new Vector3(4f, 0f, 0f)); // line points along +X
+            var behindTarget = MakeCombatant(false, new Vector3(9f, 0.2f, 0.5f));
+            var tooWide = MakeCombatant(false, new Vector3(5f, 0f, 2f));
 
             var targets = ActionResolver.ResolveTargets(skill, user, target, new List<CombatantRuntime> { user, target, behindTarget, tooWide });
 
@@ -222,28 +505,15 @@ namespace Game.Combat.Tests.EditMode
             var skill = ScriptableObject.CreateInstance<SkillDefinition>();
             skill.targetType = TargetType.SingleEnemy;
 
-            var user = MakeCombatant(true, 5, 0, Vector3.zero);
-            var target = MakeCombatant(false, 0, 0, new Vector3(1f, 0f, 0f));
-            var otherEnemy = MakeCombatant(false, 0, 0, new Vector3(1.5f, 0f, 0f));
+            var user = MakeCombatant(true, Vector3.zero);
+            var target = MakeCombatant(false, new Vector3(1f, 0f, 0f));
+            var otherEnemy = MakeCombatant(false, new Vector3(1.5f, 0f, 0f));
 
             var targets = ActionResolver.ResolveTargets(skill, user, target, new List<CombatantRuntime> { user, target, otherEnemy });
 
             CollectionAssert.AreEqual(new[] { target }, targets);
 
             Object.DestroyImmediate(skill);
-        }
-
-        [Test]
-        public void ApplyGuard_SetsGuardingAndPendingApBonus_AndReducesFear()
-        {
-            var combatant = MakeCombatant(true, 5, 0, Vector3.zero);
-            combatant.fear = 5;
-
-            ActionResolver.ApplyGuard(combatant);
-
-            Assert.IsTrue(combatant.guarding);
-            Assert.IsTrue(combatant.pendingGuardApBonus);
-            Assert.AreEqual(3, combatant.fear);
         }
     }
 }

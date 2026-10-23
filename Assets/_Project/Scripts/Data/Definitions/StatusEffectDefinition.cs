@@ -7,13 +7,19 @@ namespace Game.Data.Definitions
     {
         public Sprite icon;
 
-        public int duration; // turns
+        /// <summary>Counted in the affected unit's own turns; it expires at the end of its last one.</summary>
+        public int duration;
 
         public int tickDamage; // 0 = no DoT
 
-        public int atkModifier;
-        public int defModifier;
-        public int speedModifier;
+        /// <summary>Added to the d12 attack roll (negative = worse).</summary>
+        public int attackModifier;
+
+        /// <summary>Added to armor class (negative = worse).</summary>
+        public int armorClassModifier;
+
+        /// <summary>Stuck in a web: cannot move (it can still act where it stands).</summary>
+        public bool preventsMovement;
 
         public bool preventsAction; // covers Stun/Knockout without a separate disable system
     }

@@ -71,6 +71,12 @@ namespace Game.Overworld
                 }
                 foreach (var e in enemies) if (e != _activeEnemy) e.ForgetPlayer();
             }
+            else if (result != null && result.fled)
+            {
+                // The party escaped: not a win (the enemy stays) and not a wipe (no heal, no teleport). Everyone loses track of the
+                // player and contact stays off for the grace period below, so the same enemy cannot instantly re-trigger the fight.
+                foreach (var e in enemies) e.ForgetPlayer();
+            }
             else
             {
                 // Placeholder defeat handling: back to the entrance, everything resets (party fully healed).

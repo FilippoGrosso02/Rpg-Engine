@@ -1,4 +1,3 @@
-using System.Collections;
 using Game.Combat.Contracts;
 using UnityEngine;
 using UnityEngine.UI;
@@ -6,22 +5,34 @@ using UnityEngine.UI;
 namespace Game.Combat.UI.UGUI
 {
     /// <summary>
-    /// A bar showing the damage formula for the most recent hit — "ATK x + Roll y - DEF z =
-    /// damage" — with the roll digit cycling rapidly through random faces before settling on
-    /// the real value, like a rolling die. Fires off OnDamageRolled; overlapping hits (e.g. an
-    /// AOE skill hitting several targets) restart the animation on the latest one rather than
-    /// queuing, since this is a glanceable readout, not a combat log.
+    /// The damage calculation box at the bottom centre: a two-line readout of how the most recent attack or spell resolved — the d12
+    /// attack roll against AC, the damage dice, any save. It appears after each attack and hides itself after a few seconds;
+    /// overlapping results (a Fireball hitting several targets) just replace it.
     /// </summary>
     public class DamageRollBar : MonoBehaviour
     {
-        [SerializeField] private GameObject root;
-        [SerializeField] private Text formulaLabel;
-        [SerializeField] private Text rollDigitLabel;
-        [SerializeField] private float rollAnimationSeconds = 0.6f;
-        [SerializeField] private float holdSeconds = 1.6f;
+        public const float HoldSeconds = 3.5f;
+        public const float Width = 150f;
+        public const float Height = 30f;
 
-        private Coroutine _activeRoutine;
-        private static readonly System.Random RollRng = new System.Random();
+        [SerializeField] private PixelText lineOne;
+        [SerializeField] private PixelText lineTwo;
+        [SerializeField] private GameObject root;
+
+        private float _hideAt;
+
+        public void Build(BattleUiSprites sprites)
+        {
+            root = gameObject;
+            var panel = GetComponent<Image>() ?? gameObject.AddComponent<Image>();
+            panel.sprite = sprites.Get("panel_dark");
+            panel.type = Image.Type.Sliced;
+            panel.raycastTarget = false;
+
+            lineOne = UiFactory.Text(transform, "LineOne", "", 8, 6, Width - 16, 8, PixelText.Align.Center, UiFactory.Cream);
+            lineTwo = UiFactory.Text(transform, "LineTwo", "", 8, 16, Width - 16, 8, PixelText.Align.Center, UiFactory.Damage);
+            Hide();
+        }
 
         public void Hide()
         {
@@ -29,69 +40,115 @@ namespace Game.Combat.UI.UGUI
             {
                 root.SetActive(false);
             }
-
-            if (_activeRoutine != null)
-            {
-                StopCoroutine(_activeRoutine);
-                _activeRoutine = null;
-            }
         }
 
         public void Show(DamageRollInfo info)
         {
-            if (_activeRoutine != null)
-            {
-                StopCoroutine(_activeRoutine);
-                _activeRoutine = null;
-            }
-
-            // Must activate before StartCoroutine — root is this component's own GameObject,
-            // and Unity refuses to start a coroutine on an inactive GameObject at all (throws
-            // immediately, not just skips execution until active).
-            if (root != null)
-            {
-                root.SetActive(true);
-            }
-
-            _activeRoutine = StartCoroutine(PlayRoutine(info));
+            var lines = DescribeCompact(info).Split('\n');
+            lineOne.text = lines[0];
+            lineTwo.text = lines.Length > 1 ? lines[1] : "";
+            root.SetActive(true);
+            _hideAt = Time.unscaledTime + HoldSeconds;
         }
 
-        private IEnumerator PlayRoutine(DamageRollInfo info)
+        private void Update()
         {
-            var defText = info.defIgnored ? "DEF ignored" : $"DEF {info.effectiveDef}";
-            if (formulaLabel != null)
+            if (root.activeSelf && Time.unscaledTime >= _hideAt)
             {
-                formulaLabel.text = $"ATK {info.effectiveAtk}  +  Roll  −  {defText}  =  ?";
+                Hide();
+            }
+        }
+
+        private static string Subject(DamageRollInfo info)
+        {
+            return info.spellName ?? "Attack";
+        }
+
+        /// <summary>
+        /// A short two-line version of <see cref="Describe"/> that fits the 140 px readout, e.g.
+        /// "D12 9+10=19 VS AC13" / "HIT D8+2 = 7 DMG".
+        /// </summary>
+        public static string DescribeCompact(DamageRollInfo info)
+        {
+            return CompactText(info).ToUpperInvariant();
+        }
+
+        private static string CompactText(DamageRollInfo info)
+        {
+            if (info.autoHit)
+            {
+                return $"{Subject(info)}\nAUTO-HIT {info.damageText} = {info.damage} DMG";
             }
 
-            bool hasRoll = info.diceRoll > 0;
-            float elapsed = 0f;
-            while (elapsed < rollAnimationSeconds)
+            if (info.attackRoll > 0)
             {
-                if (rollDigitLabel != null)
+                string line1 = $"D12 {info.attackRoll}+{info.attackBonus}={info.attackRoll + info.attackBonus} VS AC{info.targetArmorClass}";
+                if (!info.hit)
                 {
-                    rollDigitLabel.text = hasRoll ? RollRng.Next(1, 7).ToString() : "—";
+                    return line1 + (info.naturalOne ? "\nMISS (NAT 1)" : "\nMISS");
                 }
 
-                elapsed += Time.deltaTime;
-                yield return null;
+                string nat = info.naturalTwelve ? " NAT 12!" : "";
+                string acid = info.corrosionPenalty > 0 ? $" -{info.corrosionPenalty}" : "";
+                return line1 + $"\nHIT{nat} {info.damageText}{acid} = {info.damage} DMG";
             }
 
-            if (rollDigitLabel != null)
+            if (info.hasSave)
             {
-                rollDigitLabel.text = hasRoll ? info.diceRoll.ToString() : "—";
+                string line1 = $"{Subject(info)}: SAVE {info.saveRoll}+{info.saveBonus}={info.saveRoll + info.saveBonus}";
+                if (!info.savePassed)
+                {
+                    return line1 + (info.damage > 0 ? $"\nFAILED {info.damageText} = {info.damage} DMG" : "\nFAILED");
+                }
+
+                return line1 + (info.halved ? $"\nSAVED HALF = {info.damage} DMG" : "\nRESISTED");
             }
 
-            if (formulaLabel != null)
+            return $"{Subject(info)}\n{info.damage} DMG";
+        }
+
+        /// <summary>One-line readout with the full wording; kept for tests and a future combat log.</summary>
+        public static string Describe(DamageRollInfo info)
+        {
+            var subject = Subject(info);
+
+            if (info.autoHit)
             {
-                var critText = info.wasCrit ? "  CRIT!" : "";
-                var rollText = hasRoll ? info.diceRoll.ToString() : "—";
-                formulaLabel.text = $"ATK {info.effectiveAtk}  +  Roll {rollText}  −  {defText}  =  {info.damage} dmg{critText}";
+                return $"{subject}  auto-hit  {info.damageText} = {info.damage} dmg";
             }
 
-            yield return new WaitForSeconds(holdSeconds);
+            if (info.attackRoll > 0)
+            {
+                string total = $"d12 {info.attackRoll} + {info.attackBonus} = {info.attackRoll + info.attackBonus} vs AC {info.targetArmorClass}";
+                if (!info.hit)
+                {
+                    string why = info.naturalOne ? " (natural 1)" : "";
+                    return $"{subject}  {total} — MISS{why}";
+                }
 
-            Hide();
+                string acid = info.corrosionPenalty > 0 ? $" (−{info.corrosionPenalty} corroded)" : "";
+                string nat = info.naturalTwelve ? " natural 12!" : "";
+                return $"{subject}  {total} — HIT{nat}  {info.damageText}{acid} = {info.damage} dmg";
+            }
+
+            if (info.hasSave)
+            {
+                string save = $"save d12 {info.saveRoll} + {info.saveBonus} = {info.saveRoll + info.saveBonus} vs 12";
+                string damage = info.damageText != null && info.damageText != "0" ? $"{info.damageText}: " : "";
+
+                if (!info.savePassed)
+                {
+                    return info.damage > 0
+                        ? $"{subject}  {save} — FAILED  {damage}{info.damage} dmg"
+                        : $"{subject}  {save} — FAILED";
+                }
+
+                return info.halved
+                    ? $"{subject}  {save} — SAVED, half  {info.damage} dmg"
+                    : $"{subject}  {save} — RESISTED";
+            }
+
+            return $"{subject}  {info.damage} dmg";
         }
     }
 }
