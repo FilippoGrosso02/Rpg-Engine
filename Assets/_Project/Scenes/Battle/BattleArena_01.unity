@@ -132,7 +132,7 @@ GameObject:
   - component: {fileID: 146701945}
   - component: {fileID: 146701944}
   - component: {fileID: 146701943}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Platform_NW
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -253,7 +253,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 266881088}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Cover
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -294,7 +294,7 @@ GameObject:
   - component: {fileID: 269416804}
   - component: {fileID: 269416803}
   - component: {fileID: 269416802}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Column_-8_9
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -439,7 +439,7 @@ GameObject:
   - component: {fileID: 405644332}
   - component: {fileID: 405644331}
   - component: {fileID: 405644330}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: CoverBlock_Center
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -552,7 +552,7 @@ GameObject:
   - component: {fileID: 449163628}
   - component: {fileID: 449163627}
   - component: {fileID: 449163626}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Dais_N
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -677,7 +677,7 @@ GameObject:
   - component: {fileID: 502093467}
   - component: {fileID: 502093466}
   - component: {fileID: 502093465}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Ramp_SE
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -802,7 +802,7 @@ GameObject:
   - component: {fileID: 532610631}
   - component: {fileID: 532610630}
   - component: {fileID: 532610629}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Wall_W
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1011,7 +1011,7 @@ GameObject:
   - component: {fileID: 606648784}
   - component: {fileID: 606648783}
   - component: {fileID: 606648782}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Wall_N
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1123,7 +1123,7 @@ GameObject:
   - component: {fileID: 621888447}
   - component: {fileID: 621888446}
   - component: {fileID: 621888445}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Column_-7.5_-0.5
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1237,7 +1237,7 @@ GameObject:
   - component: {fileID: 670515723}
   - component: {fileID: 670515722}
   - component: {fileID: 670515721}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Column_8_-9
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1351,7 +1351,7 @@ GameObject:
   - component: {fileID: 716184686}
   - component: {fileID: 716184685}
   - component: {fileID: 716184684}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Column_3.5_0
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1466,7 +1466,7 @@ GameObject:
   - component: {fileID: 841135134}
   - component: {fileID: 841135133}
   - component: {fileID: 841135132}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Platform_SE
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1590,6 +1590,7 @@ GameObject:
   - component: {fileID: 981589112}
   - component: {fileID: 981589114}
   - component: {fileID: 981589115}
+  - component: {fileID: 981589116}
   m_Layer: 0
   m_Name: Battle Camera
   m_TagString: MainCamera
@@ -1715,6 +1716,38 @@ AudioListener:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 981589111}
   m_Enabled: 1
+--- !u!114 &981589116
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 981589111}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 72ece51f2901e7445ab60da3685d6b5f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Cinemachine::Unity.Cinemachine.CinemachineBrain
+  ShowDebugText: 0
+  ShowCameraFrustum: 1
+  IgnoreTimeScale: 0
+  WorldUpOverride: {fileID: 0}
+  ChannelMask: -1
+  UpdateMethod: 2
+  BlendUpdateMethod: 1
+  LensModeOverride:
+    Enabled: 0
+    DefaultMode: 2
+  DefaultBlend:
+    Style: 1
+    Time: 2
+    CustomCurve:
+      serializedVersion: 2
+      m_Curve: []
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+  CustomBlends: {fileID: 0}
 --- !u!1 &1027000026
 GameObject:
   m_ObjectHideFlags: 0
@@ -1792,7 +1825,7 @@ GameObject:
   - component: {fileID: 1029718206}
   - component: {fileID: 1029718205}
   - component: {fileID: 1029718204}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Ramp_Dais_N
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1917,7 +1950,7 @@ GameObject:
   - component: {fileID: 1110669160}
   - component: {fileID: 1110669159}
   - component: {fileID: 1110669158}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Column_7.5_0.5
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2032,7 +2065,7 @@ GameObject:
   - component: {fileID: 1136431304}
   - component: {fileID: 1136431303}
   - component: {fileID: 1136431302}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: ArenaFloor
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2188,7 +2221,7 @@ GameObject:
   - component: {fileID: 1190081163}
   - component: {fileID: 1190081162}
   - component: {fileID: 1190081161}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Wall_E
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2328,7 +2361,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1275860973}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Perimeter
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2607,7 +2640,7 @@ GameObject:
   - component: {fileID: 1598681588}
   - component: {fileID: 1598681587}
   - component: {fileID: 1598681586}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Column_-3.5_0
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2718,7 +2751,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1671115769}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: HighGround
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2777,6 +2810,283 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1027000028}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1721147877
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1721147884}
+  - component: {fileID: 1721147883}
+  - component: {fileID: 1721147882}
+  - component: {fileID: 1721147881}
+  - component: {fileID: 1721147880}
+  - component: {fileID: 1721147879}
+  - component: {fileID: 1721147878}
+  m_Layer: 0
+  m_Name: BattleCameraRig
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1721147878
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1721147877}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 31520e947535bc840be9688cd93f871e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Game.Combat.TrailsBattle3D::Game.Combat.TrailsBattle3D.Runtime.BattleCameraRig
+  virtualCamera: {fileID: 1721147883}
+  orbit: {fileID: 1721147882}
+  lookInput: {fileID: 1721147879}
+  keyboardRotateSpeed: 110
+--- !u!114 &1721147879
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1721147877}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 89875cdc57c54474a8a74efd9b2a3b5d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Cinemachine::Unity.Cinemachine.CinemachineInputAxisController
+  ScanRecursively: 1
+  SuppressInputWhileBlending: 1
+  IgnoreTimeScale: 0
+  m_ControllerManager:
+    Controllers:
+    - Name: Look Orbit X
+      Owner: {fileID: 1721147882}
+      Enabled: 1
+      Input:
+        LegacyInput: Mouse X
+        LegacyGain: 100
+        CancelDeltaTime: 0
+      InputValue: 0
+      Driver:
+        AccelTime: 0.2
+        DecelTime: 0.2
+    - Name: Look Orbit Y
+      Owner: {fileID: 1721147882}
+      Enabled: 1
+      Input:
+        LegacyInput: Mouse Y
+        LegacyGain: -100
+        CancelDeltaTime: 0
+      InputValue: 0
+      Driver:
+        AccelTime: 0.2
+        DecelTime: 0.2
+    - Name: Orbit Scale
+      Owner: {fileID: 1721147882}
+      Enabled: 1
+      Input:
+        LegacyInput: Mouse ScrollWheel
+        LegacyGain: -100
+        CancelDeltaTime: 0
+      InputValue: 0
+      Driver:
+        AccelTime: 0
+        DecelTime: 0
+--- !u!114 &1721147880
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1721147877}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dbe43d662878a7c43bcd44d43c9e2094, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Cinemachine::Unity.Cinemachine.CinemachineDeoccluder
+  CollideAgainst:
+    serializedVersion: 2
+    m_Bits: 256
+  IgnoreTag: 
+  TransparentLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  MinimumDistanceFromTarget: 0.6
+  AvoidObstacles:
+    Enabled: 1
+    DistanceLimit: 0
+    MinimumOcclusionTime: 0
+    CameraRadius: 0.3
+    UseFollowTarget:
+      Enabled: 0
+      YOffset: 0
+    Strategy: 0
+    MaximumEffort: 4
+    SmoothingTime: 0
+    Damping: 0.4
+    DampingWhenOccluded: 0.2
+  ShotQualityEvaluation:
+    Enabled: 0
+    OptimalDistance: 10
+    NearLimit: 5
+    FarLimit: 30
+    MaxQualityBoost: 0.2
+--- !u!114 &1721147881
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1721147877}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f38bda98361e1de48a4ca2bd86ea3c17, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Cinemachine::Unity.Cinemachine.CinemachineRotationComposer
+  Composition:
+    ScreenPosition: {x: -0.18, y: -0.1}
+    DeadZone:
+      Enabled: 0
+      Size: {x: 0.2, y: 0.2}
+    HardLimits:
+      Enabled: 0
+      Size: {x: 0.8, y: 0.8}
+      Offset: {x: 0, y: 0}
+  CenterOnActivate: 1
+  TargetOffset: {x: 0, y: 0, z: 0}
+  Damping: {x: 0.1, y: 0.1}
+  Lookahead:
+    Enabled: 0
+    Time: 0
+    Smoothing: 0
+    IgnoreY: 0
+--- !u!114 &1721147882
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1721147877}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3b5d7c088409d9a40b7b09aa707777f8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Cinemachine::Unity.Cinemachine.CinemachineOrbitalFollow
+  TargetOffset: {x: 0, y: 0, z: 0}
+  TrackerSettings:
+    BindingMode: 4
+    PositionDamping: {x: 0.35, y: 0.35, z: 0.35}
+    AngularDampingMode: 0
+    RotationDamping: {x: 1, y: 1, z: 1}
+    QuaternionDamping: 1
+  OrbitStyle: 0
+  Radius: 3.4
+  Orbits:
+    Top:
+      Radius: 2
+      Height: 5
+    Center:
+      Radius: 4
+      Height: 2.25
+    Bottom:
+      Radius: 2.5
+      Height: 0.1
+    SplineCurvature: 0.5
+  RecenteringTarget: 2
+  HorizontalAxis:
+    Value: 0
+    Center: 0
+    Range: {x: -180, y: 180}
+    Wrap: 1
+    Recentering:
+      Enabled: 0
+      Wait: 1
+      Time: 2
+    Restrictions: 0
+  VerticalAxis:
+    Value: 20
+    Center: 17.5
+    Range: {x: -10, y: 70}
+    Wrap: 0
+    Recentering:
+      Enabled: 0
+      Wait: 1
+      Time: 2
+    Restrictions: 0
+  RadialAxis:
+    Value: 1
+    Center: 1
+    Range: {x: 1, y: 1}
+    Wrap: 0
+    Recentering:
+      Enabled: 0
+      Wait: 1
+      Time: 2
+    Restrictions: 0
+--- !u!114 &1721147883
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1721147877}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f9dfa5b682dcd46bda6128250e975f58, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Cinemachine::Unity.Cinemachine.CinemachineCamera
+  Priority:
+    Enabled: 0
+    m_Value: 0
+  OutputChannel: 1
+  StandbyUpdate: 2
+  m_StreamingVersion: 0
+  m_LegacyPriority: 0
+  Target:
+    TrackingTarget: {fileID: 0}
+    LookAtTarget: {fileID: 0}
+    CustomLookAtTarget: 0
+  Lens:
+    FieldOfView: 55
+    OrthographicSize: 10
+    NearClipPlane: 0.1
+    FarClipPlane: 5000
+    Dutch: 0
+    ModeOverride: 0
+    PhysicalProperties:
+      GateFit: 2
+      SensorSize: {x: 21.946, y: 16.002}
+      LensShift: {x: 0, y: 0}
+      FocusDistance: 10
+      Iso: 200
+      ShutterSpeed: 0.005
+      Aperture: 16
+      BladeCount: 5
+      Curvature: {x: 2, y: 11}
+      BarrelClipping: 0.25
+      Anamorphism: 0
+  BlendHint: 0
+--- !u!4 &1721147884
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1721147877}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 2, z: -5}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1770084703
 GameObject:
   m_ObjectHideFlags: 0
@@ -2820,7 +3130,7 @@ GameObject:
   - component: {fileID: 1775021438}
   - component: {fileID: 1775021437}
   - component: {fileID: 1775021436}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Wall_S
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2991,7 +3301,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2070336300}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: ArenaDressing
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -3029,7 +3339,7 @@ GameObject:
   - component: {fileID: 2140194562}
   - component: {fileID: 2140194561}
   - component: {fileID: 2140194560}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Ramp_NW
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -3151,3 +3461,4 @@ SceneRoots:
   - {fileID: 981589113}
   - {fileID: 1027000028}
   - {fileID: 2070336300}
+  - {fileID: 1721147884}

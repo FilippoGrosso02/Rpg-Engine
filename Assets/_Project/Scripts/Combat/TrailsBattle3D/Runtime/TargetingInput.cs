@@ -6,14 +6,27 @@ using UnityEngine.EventSystems;
 namespace Game.Combat.TrailsBattle3D.Runtime
 {
     /// <summary>
-    /// Camera raycast into the arena: click a CombatantView to attack it, click a
+    /// Camera raycast into the arena: aim at a CombatantView to attack it, or at a
     /// BattleArenaFloor to move there. Identifies hits by component rather than physics
     /// layer, so no ProjectSettings/layer setup is required to use it.
+    /// While the cursor is locked (third-person look) the ray comes from the screen centre, i.e. the
+    /// crosshair; while the cursor is free (Alt / Tab) it comes from the mouse as before.
     /// </summary>
     public class TargetingInput : MonoBehaviour
     {
         public Camera arenaCamera;
         public float maxRayDistance = 200f;
+
+        /// <summary>The acting unit. Its own colliders are skipped, otherwise a camera sitting behind it would always hit it first.</summary>
+        public CombatantView ignoredView;
+
+        private readonly RaycastHit[] _hits = new RaycastHit[32];
+
+        public bool CursorLocked => Cursor.lockState == CursorLockMode.Locked;
+
+        public Vector2 AimScreenPoint => CursorLocked
+            ? new Vector2(Screen.width * 0.5f, Screen.height * 0.5f)
+            : (Vector2)Input.mousePosition;
 
         private void Awake()
         {
@@ -23,17 +36,47 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             }
         }
 
-        public bool TryRaycastCombatant(out CombatantView view)
+        /// <summary>Nearest hit along the aim ray that does not belong to <see cref="ignoredView"/>.</summary>
+        private bool TryAimRaycast(out RaycastHit best)
         {
-            view = null;
+            best = default;
 
             if (arenaCamera == null || IsPointerOverUi())
             {
                 return false;
             }
 
-            var ray = arenaCamera.ScreenPointToRay(Input.mousePosition);
-            if (Physics.Raycast(ray, out var hit, maxRayDistance))
+            var ray = arenaCamera.ScreenPointToRay(AimScreenPoint);
+            int count = Physics.RaycastNonAlloc(ray, _hits, maxRayDistance);
+
+            float bestDistance = float.MaxValue;
+            bool found = false;
+            for (int i = 0; i < count; i++)
+            {
+                var hit = _hits[i];
+                if (hit.distance >= bestDistance)
+                {
+                    continue;
+                }
+
+                if (ignoredView != null && hit.collider.GetComponentInParent<CombatantView>() == ignoredView)
+                {
+                    continue;
+                }
+
+                best = hit;
+                bestDistance = hit.distance;
+                found = true;
+            }
+
+            return found;
+        }
+
+        public bool TryRaycastCombatant(out CombatantView view)
+        {
+            view = null;
+
+            if (TryAimRaycast(out var hit))
             {
                 view = hit.collider.GetComponentInParent<CombatantView>();
                 return view != null;
@@ -43,7 +86,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         }
 
         /// <summary>
-        /// Picks the candidate whose body is closest to the mouse on screen (within <paramref name="maxPixels"/>).
+        /// Picks the candidate whose body is closest to the aim point on screen (within <paramref name="maxPixels"/>).
         /// Needed for hidden, collider-less targets such as a defeated ally about to be revived.
         /// </summary>
         public bool TryPickNearestOnScreen(IEnumerable<CombatantRuntime> candidates, out CombatantRuntime picked, float maxPixels = 90f)
@@ -55,7 +98,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 return false;
             }
 
-            Vector2 mouse = Input.mousePosition;
+            Vector2 aim = AimScreenPoint;
             float best = maxPixels;
             foreach (var candidate in candidates)
             {
@@ -65,7 +108,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                     continue;
                 }
 
-                float distance = Vector2.Distance(mouse, new Vector2(screen.x, screen.y));
+                float distance = Vector2.Distance(aim, new Vector2(screen.x, screen.y));
                 if (distance < best)
                 {
                     best = distance;
@@ -80,19 +123,10 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         {
             point = default;
 
-            if (arenaCamera == null || IsPointerOverUi())
+            if (TryAimRaycast(out var hit) && hit.collider.GetComponentInParent<BattleArenaFloor>() != null)
             {
-                return false;
-            }
-
-            var ray = arenaCamera.ScreenPointToRay(Input.mousePosition);
-            if (Physics.Raycast(ray, out var hit, maxRayDistance))
-            {
-                if (hit.collider.GetComponentInParent<BattleArenaFloor>() != null)
-                {
-                    point = hit.point;
-                    return true;
-                }
+                point = hit.point;
+                return true;
             }
 
             return false;
@@ -102,11 +136,12 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         /// Physics.Raycast has no idea the HUD's Screen Space canvas exists — without this,
         /// clicking a button (Guard, a Craft entry, Cancel...) also fires a 3D raycast
         /// straight through it into the arena underneath, potentially moving the actor or
-        /// hitting a combatant the player never meant to target.
+        /// hitting a combatant the player never meant to target. Only relevant while the
+        /// cursor is free; a locked cursor can't be over any UI.
         /// </summary>
-        private static bool IsPointerOverUi()
+        private bool IsPointerOverUi()
         {
-            return EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+            return !CursorLocked && EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
         }
     }
 }

@@ -11,5 +11,8 @@ namespace Game.Combat.TrailsBattle3D.Runtime
     public class CombatantView : MonoBehaviour
     {
         public CombatantRuntime Runtime { get; set; }
+
+        /// <summary>Head-height point the battle camera follows (child of the view, set up when the view is spawned).</summary>
+        public Transform CameraTarget { get; set; }
     }
 }

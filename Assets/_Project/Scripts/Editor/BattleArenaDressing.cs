@@ -81,8 +81,11 @@ namespace Game.EditorTools
             Platform(high, "Platform_SE", new Vector3(12f, 0.75f, -6.5f), new Vector3(4f, 1.5f, 7f));
             Ramp(high, "Ramp_SE", new Vector3(12f, 0f, -1.25f), 180f, width: 3f, rise: 1.5f, run: 3.5f);
 
+            // The third-person camera collides with this layer only (not with combatants).
+            int geometryLayer = ThirdPersonBattleSetup.EnsureLayer(ThirdPersonBattleSetup.GeometryLayerName);
             foreach (var t in root.GetComponentsInChildren<Transform>())
             {
+                t.gameObject.layer = geometryLayer;
                 GameObjectUtility.SetStaticEditorFlags(t.gameObject, StaticEditorFlags.NavigationStatic | StaticEditorFlags.BatchingStatic);
             }
 

@@ -4,7 +4,8 @@
     "references": [
         "Game.Combat.Contracts",
         "Game.Data",
-        "Game.Common"
+        "Game.Common",
+        "Unity.Cinemachine"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

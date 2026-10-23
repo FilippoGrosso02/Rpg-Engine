@@ -76,6 +76,17 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         private Vector3 _turnStartPosition;
         private NavMeshPath _sharedMovePath;
 
+        // Third-person control: camera rig in the arena scene, cursor lock state, WASD walking animation flag.
+        private BattleCameraRig _cameraRig;
+        private CombatantRuntime _cameraFocus;
+        private bool _manualMoving;
+        private bool _cursorToggledFree;
+        private bool _encounterOver;
+        private bool _cursorStateSaved;
+        private CursorLockMode _savedLockState;
+        private bool _savedCursorVisible;
+        private int _appliedCursorFree = -1;
+
         private static readonly Color AllyHighlightColor = new Color(0.35f, 0.55f, 0.95f);
         private static readonly Color EnemyHighlightColor = new Color(0.85f, 0.35f, 0.35f);
 
@@ -83,7 +94,138 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         {
             _encounter = encounter;
             _onComplete = onComplete;
+            _encounterOver = false;
+            _cursorToggledFree = false;
+            _appliedCursorFree = -1;
+            if (!_cursorStateSaved)
+            {
+                _savedLockState = Cursor.lockState;
+                _savedCursorVisible = Cursor.visible;
+                _cursorStateSaved = true;
+            }
+
             StartCoroutine(RunEncounter());
+        }
+
+        private void OnDestroy()
+        {
+            RestoreCursor();
+        }
+
+        /// <summary>
+        /// Third-person look needs the mouse, so the cursor is locked and hidden during the battle. Holding Alt
+        /// (or toggling with Tab) frees it for the HUD buttons, and it is always freed once the encounter ends
+        /// so the result panel can be clicked. Skipped when autoPiloting (headless tests).
+        /// </summary>
+        private void UpdateCursorMode()
+        {
+            if (autoPilotAllSides || (_encounterOver && !_cursorStateSaved))
+            {
+                return;
+            }
+
+            if (Input.GetKeyDown(KeyCode.Tab))
+            {
+                _cursorToggledFree = !_cursorToggledFree;
+            }
+
+            bool wantFree = _encounterOver
+                || _cursorToggledFree
+                || Input.GetKey(KeyCode.LeftAlt)
+                || Input.GetKey(KeyCode.RightAlt);
+
+            _cameraRig?.SetLookEnabled(!wantFree);
+
+            int applied = wantFree ? 1 : 0;
+            if (applied == _appliedCursorFree)
+            {
+                return;
+            }
+
+            _appliedCursorFree = applied;
+            Cursor.lockState = wantFree ? CursorLockMode.None : CursorLockMode.Locked;
+            Cursor.visible = wantFree;
+        }
+
+        private void RestoreCursor()
+        {
+            if (!_cursorStateSaved)
+            {
+                return;
+            }
+
+            Cursor.lockState = _savedLockState;
+            Cursor.visible = _savedCursorVisible;
+            _cursorStateSaved = false;
+        }
+
+        /// <summary>
+        /// Points the battle camera at <paramref name="actor"/>. When the focus actually changes it also swings
+        /// round to look towards the nearest opponent, so each new turn starts facing the fight; taking
+        /// consecutive turns keeps whatever angle the player chose. Enemy turns never call this, so the camera
+        /// stays on the last ally.
+        /// </summary>
+        private void FocusCameraOn(CombatantRuntime actor, List<CombatantRuntime> opponents)
+        {
+            if (_cameraRig == null || actor == null)
+            {
+                return;
+            }
+
+            if (_views.TryGetValue(actor, out var go) && go != null)
+            {
+                var view = go.GetComponent<CombatantView>();
+                _cameraRig.Follow(view != null && view.CameraTarget != null ? view.CameraTarget : go.transform);
+            }
+
+            if (_cameraFocus != actor && opponents != null && opponents.Count > 0)
+            {
+                var nearest = opponents.OrderBy(o => Vector3.Distance(o.position, actor.position)).First();
+                _cameraRig.FaceTowards(actor.position, nearest.position);
+            }
+
+            _cameraFocus = actor;
+        }
+
+        /// <summary>
+        /// WASD walking, relative to the camera, spent from the same per-turn budget as everything else: the
+        /// actor may stray at most moveRange from where the turn began (that circle is what the movement ring shows).
+        /// </summary>
+        private void UpdateManualMovement(CombatantRuntime actor, TargetingInput targeting)
+        {
+            bool moving = false;
+            var input = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
+
+            if (input.sqrMagnitude > 0.01f && targeting != null && targeting.arenaCamera != null)
+            {
+                var cameraTransform = targeting.arenaCamera.transform;
+                var forward = Vector3.ProjectOnPlane(cameraTransform.forward, Vector3.up).normalized;
+                var right = Vector3.ProjectOnPlane(cameraTransform.right, Vector3.up).normalized;
+                var direction = forward * input.y + right * input.x;
+                if (direction.sqrMagnitude > 1f)
+                {
+                    direction.Normalize();
+                }
+
+                if (MovementController.TryStep(actor.position, direction * (MoveSpeed * Time.deltaTime), _turnStartPosition, actor.moveRange, out var next))
+                {
+                    actor.position = next;
+                    SyncViewPosition(actor);
+                    moving = true;
+
+                    if (_views.TryGetValue(actor, out var go) && go != null && direction.sqrMagnitude > 0.0001f)
+                    {
+                        go.transform.rotation = Quaternion.RotateTowards(
+                            go.transform.rotation, Quaternion.LookRotation(direction), 720f * Time.deltaTime);
+                    }
+                }
+            }
+
+            if (moving != _manualMoving)
+            {
+                _manualMoving = moving;
+                GetAnimator(actor)?.SetSpeed(moving ? 1f : 0f);
+            }
         }
 
         /// <summary>
@@ -98,6 +240,8 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             {
                 return;
             }
+
+            UpdateCursorMode();
 
             var targeting = GetComponent<TargetingInput>();
             if (targeting == null)
@@ -170,6 +314,12 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
             SpawnParty(ResolvePartyIds(_encounter));
             SpawnEnemies(_encounter.enemyIds);
+
+            // Start on the first ally (looking at the nearest enemy) so the camera is sensible even if an
+            // enemy acts first; from then on it only moves when an ally's turn begins.
+            _cameraFocus = null;
+            var firstAlly = _combatants.FirstOrDefault(c => c.isPlayerSide);
+            FocusCameraOn(firstAlly, _combatants.Where(c => !c.isPlayerSide).ToList());
 
             _scheduler = new TurnScheduler(_combatants);
             RaiseTurnOrderChanged();
@@ -251,6 +401,8 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 SavePartyState();
             }
 
+            // Free the cursor so the result panel can be clicked.
+            _encounterOver = true;
             OnEncounterEnded?.Invoke(result);
 
             if (WaitForResultAcknowledgementBeforeUnload)
@@ -260,7 +412,9 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             }
 
             CleanupViews();
+            _cameraRig = null;
             yield return SceneManager.UnloadSceneAsync(_battleScene);
+            RestoreCursor();
 
             _onComplete?.Invoke(result);
         }
@@ -284,6 +438,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             }
             else
             {
+                FocusCameraOn(actor, opponents);
                 yield return ResolvePlayerTurn(actor, opponents);
             }
         }
@@ -439,9 +594,19 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             _movementArea.ShowCircle(_turnStartPosition, actor.moveRange);
 
             var targeting = GetComponent<TargetingInput>();
+            if (targeting != null)
+            {
+                // The crosshair ray starts behind the actor, so it must not hit the actor's own body.
+                targeting.ignoredView = _views.TryGetValue(actor, out var actorGo) && actorGo != null
+                    ? actorGo.GetComponent<CombatantView>()
+                    : null;
+            }
+
+            _manualMoving = false;
 
             while (true)
             {
+                UpdateManualMovement(actor, targeting);
                 UpdateHoverPreview(actor, targeting);
                 UpdateAttackRangeArea(actor, targeting);
                 UpdateAoePreview(actor, targeting);
@@ -500,8 +665,10 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                             }
                         }
                     }
-                    else if (targeting.TryRaycastGround(out var point))
+                    else if (!targeting.CursorLocked && targeting.TryRaycastGround(out var point))
                     {
+                        // Click-to-move is only a fallback while the cursor is free (Alt / Tab); with the
+                        // cursor locked, movement is WASD (UpdateManualMovement).
                         // Anchored to the turn-start position (not the actor's current,
                         // possibly-already-moved position) so repeated clicks can't chain
                         // into unlimited movement across a single turn.
@@ -513,6 +680,12 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 }
 
                 yield return null;
+            }
+
+            if (_manualMoving)
+            {
+                _manualMoving = false;
+                GetAnimator(actor)?.SetSpeed(0f);
             }
 
             _movementArea.Hide();
@@ -567,7 +740,10 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             // Sample the raw hovered point onto the NavMesh (not clamped toward the actor)
             // so an out-of-range destination can still be shown — in red — rather than
             // silently snapping to the clamped point the player didn't actually point at.
-            if (targeting.TryRaycastGround(out var point)
+            // The click-to-move path preview only applies while the cursor is free; with the cursor locked
+            // you walk with WASD, so a "move here" marker under the crosshair would be misleading.
+            if (!targeting.CursorLocked
+                && targeting.TryRaycastGround(out var point)
                 && NavMesh.SamplePosition(point, out var navHit, actor.moveRange + 5f, NavMesh.AllAreas))
             {
                 _movementPathPreview.Show(actor.position, navHit.position, _turnStartPosition, actor.moveRange);
@@ -703,11 +879,15 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
             foreach (var root in _battleScene.GetRootGameObjects())
             {
+                if (_cameraRig == null)
+                {
+                    _cameraRig = root.GetComponentInChildren<BattleCameraRig>();
+                }
+
                 var camera = root.GetComponentInChildren<Camera>();
                 if (camera != null)
                 {
                     targeting.arenaCamera = camera;
-                    return;
                 }
             }
         }
@@ -1265,6 +1445,12 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
             view.Runtime = runtime;
             runtime.viewTransform = instance.transform;
+
+            // Head-height point for the third-person camera to follow (a child, so it moves with the unit).
+            var cameraTarget = new GameObject("CameraTarget").transform;
+            cameraTarget.SetParent(instance.transform, false);
+            cameraTarget.localPosition = new Vector3(0f, 1.5f, 0f);
+            view.CameraTarget = cameraTarget;
 
             var animator = instance.GetComponent<CombatantAnimator>();
             if (animator == null)
