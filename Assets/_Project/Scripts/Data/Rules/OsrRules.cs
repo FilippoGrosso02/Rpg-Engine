@@ -29,10 +29,10 @@ namespace Game.Data.Rules
             return Mathf.Max(1, hitDieSides + Modifier(vitality));
         }
 
-        /// <summary>6 + armor + DEX modifier.</summary>
-        public static int ArmorClass(int armorBonus, int dexterity)
+        /// <summary>6 + armor. (DEX is deliberately left out for now.)</summary>
+        public static int ArmorClass(int armorBonus)
         {
-            return BaseArmorClass + armorBonus + Modifier(dexterity);
+            return BaseArmorClass + armorBonus;
         }
 
         /// <summary>d12 + attack bonus >= AC, except a natural 1 always misses and a natural 12 always hits.</summary>

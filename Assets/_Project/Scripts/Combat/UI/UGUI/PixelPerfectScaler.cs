@@ -7,6 +7,7 @@ namespace Game.Combat.UI.UGUI
     /// Keeps the 480x270 HUD at an INTEGER scale (x1, x2, x3...) so the pixel art never shimmers: the canvas scale factor is the
     /// largest whole number that fits, and any leftover window area is letterboxed (the 3D scene simply shows around the UI).
     /// </summary>
+    [ExecuteAlways]
     [RequireComponent(typeof(Canvas), typeof(CanvasScaler))]
     public class PixelPerfectScaler : MonoBehaviour
     {

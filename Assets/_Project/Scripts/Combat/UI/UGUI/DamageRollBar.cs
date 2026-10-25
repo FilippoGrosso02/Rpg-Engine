@@ -1,3 +1,4 @@
+using System.Collections;
 using Game.Combat.Contracts;
 using UnityEngine;
 using UnityEngine.UI;
@@ -12,6 +13,10 @@ namespace Game.Combat.UI.UGUI
     public class DamageRollBar : MonoBehaviour
     {
         public const float HoldSeconds = 3.5f;
+        private const float RollSeconds = 0.7f;
+        private const float RollTick = 0.05f;
+        private const float SettleSeconds = 0.4f;
+        private const float SumSeconds = 0.6f;
         public const float Width = 150f;
         public const float Height = 30f;
 
@@ -20,6 +25,10 @@ namespace Game.Combat.UI.UGUI
         [SerializeField] private GameObject root;
 
         private float _hideAt;
+        private bool _previewing;
+        private bool _animating;
+        private Coroutine _animation;
+        private System.Action _onSettled;
 
         public void Build(BattleUiSprites sprites)
         {
@@ -36,75 +45,142 @@ namespace Game.Combat.UI.UGUI
 
         public void Hide()
         {
+            CancelAnimation();
+            _previewing = false;
             if (root != null)
             {
                 root.SetActive(false);
             }
         }
 
-        public void Show(DamageRollInfo info)
+        /// <summary>Stops a running dice animation; whatever waited for its final number gets it now.</summary>
+        private void CancelAnimation()
         {
-            var lines = DescribeCompact(info).Split('\n');
-            lineOne.text = lines[0];
-            lineTwo.text = lines.Length > 1 ? lines[1] : "";
-            root.SetActive(true);
-            _hideAt = Time.unscaledTime + HoldSeconds;
+            if (_animation != null)
+            {
+                StopCoroutine(_animation);
+                _animation = null;
+            }
+
+            _animating = false;
+            Settle();
         }
 
-        private void Update()
+        /// <summary>
+        /// The outcome of an attack, as a number only: the dice tumble and settle, the modifier is added, and only then the final amount
+        /// appears (staying up for <see cref="HoldSeconds"/>). <paramref name="onSettled"/> fires when the final amount is shown, or at once
+        /// if a newer result interrupts this one, so whatever waits for the number is never dropped.
+        /// </summary>
+        public void Show(DamageRollInfo info, System.Action onSettled = null)
         {
-            if (root.activeSelf && Time.unscaledTime >= _hideAt)
+            CancelAnimation();
+            _onSettled = onSettled;
+            lineTwo.text = "";
+            PlaceLines(centred: true);
+            _previewing = false;
+            root.SetActive(true);
+            _animation = StartCoroutine(Animate(info));
+        }
+
+        /// <summary>Before the player commits: just the damage dice plus modifier of the aimed action, e.g. "D8+2". Stays up until hidden.</summary>
+        public void ShowPreview(string damageText)
+        {
+            CancelAnimation();
+            lineOne.color = UiFactory.Cream;
+            lineOne.text = string.IsNullOrEmpty(damageText) ? "0" : damageText.ToUpperInvariant();
+            lineTwo.text = "";
+            PlaceLines(centred: true);
+            root.SetActive(true);
+            _previewing = true;
+        }
+
+        /// <summary>Hides the aim preview; a damage result that is rolling or still being read is left alone.</summary>
+        public void HidePreview()
+        {
+            if (_previewing)
             {
                 Hide();
             }
         }
 
+        private void PlaceLines(bool centred)
+        {
+            UiFactory.Place(lineOne.rectTransform, 8, centred ? 11 : 6, Width - 16, 8);
+        }
+
+        private void Update()
+        {
+            if (root.activeSelf && !_previewing && !_animating && Time.unscaledTime >= _hideAt)
+            {
+                Hide();
+            }
+        }
+
+        /// <summary>The final readout: just the damage number (or MISS / RESISTED when nothing was dealt). No attack name, no wording.</summary>
+        public static string DescribeCompact(DamageRollInfo info)
+        {
+            if (!info.hit)
+            {
+                return "MISS";
+            }
+
+            return info.effectNegated ? "RESISTED" : info.damage.ToString();
+        }
+
+        /// <summary>The dice plus modifier as they add up, e.g. "5+2" or "5-1" (acid corrosion folded into the modifier).</summary>
+        public static string SumText(DamageRollInfo info)
+        {
+            int modifier = info.damageBonus - info.corrosionPenalty;
+            return modifier == 0 ? info.diceTotal.ToString()
+                : modifier > 0 ? $"{info.diceTotal}+{modifier}"
+                : $"{info.diceTotal}{modifier}";
+        }
+
+        private IEnumerator Animate(DamageRollInfo info)
+        {
+            _animating = true;
+            bool rolls = info.hit && !info.effectNegated && info.diceCount > 0;
+
+            if (rolls)
+            {
+                // 1. The dice tumble: the number fluctuates, then settles on what was rolled.
+                lineOne.color = UiFactory.Cream;
+                float end = Time.unscaledTime + RollSeconds;
+                while (Time.unscaledTime < end)
+                {
+                    lineOne.text = Random.Range(info.diceCount, info.diceCount * info.diceSides + 1).ToString();
+                    yield return new WaitForSecondsRealtime(RollTick);
+                }
+
+                lineOne.text = info.diceTotal.ToString();
+                yield return new WaitForSecondsRealtime(SettleSeconds);
+
+                // 2. The modifier is added to the dice.
+                if (info.damageBonus - info.corrosionPenalty != 0)
+                {
+                    lineOne.text = SumText(info);
+                    yield return new WaitForSecondsRealtime(SumSeconds);
+                }
+            }
+
+            // 3. Only now the final amount.
+            lineOne.color = UiFactory.Damage;
+            lineOne.text = DescribeCompact(info);
+            _animating = false;
+            _hideAt = Time.unscaledTime + HoldSeconds;
+            Settle();
+        }
+
+        private void Settle()
+        {
+            var done = _onSettled;
+            _onSettled = null;
+            done?.Invoke();
+        }
+
         private static string Subject(DamageRollInfo info)
         {
             return info.spellName ?? "Attack";
-        }
-
-        /// <summary>
-        /// A short two-line version of <see cref="Describe"/> that fits the 140 px readout, e.g.
-        /// "D12 9+10=19 VS AC13" / "HIT D8+2 = 7 DMG".
-        /// </summary>
-        public static string DescribeCompact(DamageRollInfo info)
-        {
-            return CompactText(info).ToUpperInvariant();
-        }
-
-        private static string CompactText(DamageRollInfo info)
-        {
-            if (info.autoHit)
-            {
-                return $"{Subject(info)}\nAUTO-HIT {info.damageText} = {info.damage} DMG";
-            }
-
-            if (info.attackRoll > 0)
-            {
-                string line1 = $"D12 {info.attackRoll}+{info.attackBonus}={info.attackRoll + info.attackBonus} VS AC{info.targetArmorClass}";
-                if (!info.hit)
-                {
-                    return line1 + (info.naturalOne ? "\nMISS (NAT 1)" : "\nMISS");
-                }
-
-                string nat = info.naturalTwelve ? " NAT 12!" : "";
-                string acid = info.corrosionPenalty > 0 ? $" -{info.corrosionPenalty}" : "";
-                return line1 + $"\nHIT{nat} {info.damageText}{acid} = {info.damage} DMG";
-            }
-
-            if (info.hasSave)
-            {
-                string line1 = $"{Subject(info)}: SAVE {info.saveRoll}+{info.saveBonus}={info.saveRoll + info.saveBonus}";
-                if (!info.savePassed)
-                {
-                    return line1 + (info.damage > 0 ? $"\nFAILED {info.damageText} = {info.damage} DMG" : "\nFAILED");
-                }
-
-                return line1 + (info.halved ? $"\nSAVED HALF = {info.damage} DMG" : "\nRESISTED");
-            }
-
-            return $"{Subject(info)}\n{info.damage} DMG";
         }
 
         /// <summary>One-line readout with the full wording; kept for tests and a future combat log.</summary>

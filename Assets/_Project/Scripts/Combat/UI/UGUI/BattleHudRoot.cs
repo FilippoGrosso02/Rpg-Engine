@@ -50,6 +50,8 @@ namespace Game.Combat.UI.UGUI
         [Tooltip("Also show the hit-chance badge for the plain Basic Attack. The spec shows it only while a spell is selected, which would leave heroes without spells with no readout at all.")]
         [SerializeField] private bool showHitChanceForBasicAttack = true;
 
+        private const float TurnBarHeight = 40f;
+
         private ICombatEvents _events;
         private IPlayerCommandInput _input;
         private BattleMenuModel _model;
@@ -113,6 +115,8 @@ namespace Game.Combat.UI.UGUI
             _events.OnDamageRolled += HandleDamageRolled;
             _events.OnAimChanged += HandleAimChanged;
             _events.OnPlayerActionCommitted += HandleActionCommitted;
+
+            ApplyRuntimeLayout();
 
             _model = inputController != null ? inputController.Model : new BattleMenuModel();
             _model.Changed += RefreshMenu;
@@ -287,8 +291,15 @@ namespace Game.Combat.UI.UGUI
 
         private void HandleDamageRolled(DamageRollInfo info)
         {
-            rollBar?.Show(info);
-            SpawnFloatingNumber(info);
+            // The floating number waits for the dice animation to settle on the final amount.
+            if (rollBar != null)
+            {
+                rollBar.Show(info, () => SpawnFloatingNumber(info));
+            }
+            else
+            {
+                SpawnFloatingNumber(info);
+            }
         }
 
         private void HandleAimChanged(AimReadout readout)
@@ -365,12 +376,18 @@ namespace Game.Combat.UI.UGUI
             }
 
             var state = _model.State;
-            modeRibbon?.SetState(state);
+            modeRibbon?.SetState(state, _acting != null && _acting.isPlayerSide);
+
+            // Commands belong to the player's own turn: gone while an enemy acts or the player's action is resolving.
+            if (commandBar != null)
+            {
+                commandBar.gameObject.SetActive(state != MenuState.Locked);
+            }
+
             commandBar?.SetState(state, _model.Spells.Count > 0, _model.Items.Count > 0);
 
             bool listIsSpells = state == MenuState.Spells || (state == MenuState.FleeConfirm && _model.StateBeforePrompt == MenuState.Spells);
             bool listIsItems = state == MenuState.Items || (state == MenuState.FleeConfirm && _model.StateBeforePrompt == MenuState.Items);
-
             // The hand only appears while the spell command is open (E); Esc or right click closes it again.
             if (listIsSpells && _model.Spells.Count > 0)
             {
@@ -433,17 +450,48 @@ namespace Game.Combat.UI.UGUI
                 return;
             }
 
-            bool spellSelected = _model.SelectedSpellId != null;
+            // The bottom-centre slot belongs to the spell/item description while a list is open, so the damage box (and the hit chance
+            // on top of it) only previews the Basic Attack from the main menu; a spell's damage box appears when its dice roll after the cast.
             bool basicAllowed = showHitChanceForBasicAttack && _aim.isBasicAttack;
-            bool open = _model.State != MenuState.Locked && _model.State != MenuState.FleeConfirm;
+            bool open = _model.State == MenuState.Root;
 
-            if (open && _aim.target != null && (spellSelected || basicAllowed))
+            // Pointing at someone on my turn: the damage box shows the dice + modifier with the hit chance on top of it.
+            if (open && _aim.target != null && basicAllowed)
             {
                 hitBadge.Show(_aim.hitChancePercent);
+                rollBar?.ShowPreview(_aim.damageText);
             }
             else
             {
                 hitBadge.Hide();
+                rollBar?.HidePreview();
+            }
+        }
+
+        /// <summary>
+        /// Runtime layout: the hit-chance badge sits centred just above the damage box, the spell/item description takes the damage box's
+        /// place at the bottom centre, and the turn ribbon hangs under the turn bar at the top.
+        /// </summary>
+        private void ApplyRuntimeLayout()
+        {
+            if (hitBadge != null && rollBar != null && rollBar.transform.parent != null)
+            {
+                var badge = (RectTransform)hitBadge.transform;
+                var bar = (RectTransform)rollBar.transform;
+                badge.SetParent(bar.parent, false);
+                UiFactory.Place(badge, (bar.sizeDelta.x - badge.sizeDelta.x) * 0.5f, -(badge.sizeDelta.y + 1f), badge.sizeDelta.x, badge.sizeDelta.y);
+            }
+
+            if (detailTooltip != null)
+            {
+                var tooltip = (RectTransform)detailTooltip.transform;
+                UiFactory.Place(tooltip, (UiFactory.ScreenWidth - tooltip.sizeDelta.x) * 0.5f, UiFactory.ScreenHeight - 2f - DamageRollBar.Height + (DamageRollBar.Height - tooltip.sizeDelta.y) * 0.5f, tooltip.sizeDelta.x, tooltip.sizeDelta.y);
+            }
+
+            if (modeRibbon != null)
+            {
+                var ribbon = (RectTransform)modeRibbon.transform;
+                UiFactory.Place(ribbon, (UiFactory.ScreenWidth - ribbon.sizeDelta.x) * 0.5f, TurnBarHeight + 2f, ribbon.sizeDelta.x, ribbon.sizeDelta.y);
             }
         }
 

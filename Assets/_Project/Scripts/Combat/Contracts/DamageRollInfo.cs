@@ -25,6 +25,8 @@ namespace Game.Combat.Contracts
 
         /// <summary>Damage dice as written, e.g. "d8+2" or "2d6".</summary>
         public string damageText;
+        public int diceCount;
+        public int diceSides;
         public int diceTotal;
         public int damageBonus;
 

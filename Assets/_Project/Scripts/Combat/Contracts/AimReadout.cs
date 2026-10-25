@@ -15,6 +15,9 @@ namespace Game.Combat.Contracts
         /// <summary>True when the chance is for the plain Basic Attack (no spell selected).</summary>
         public bool isBasicAttack;
 
+        /// <summary>The action's damage dice plus modifier (e.g. "d8+2"), shown in the damage box before the player commits.</summary>
+        public string damageText;
+
         public static readonly AimReadout None = new AimReadout();
     }
 }

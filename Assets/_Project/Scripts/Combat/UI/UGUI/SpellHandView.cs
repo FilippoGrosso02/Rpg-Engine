@@ -17,10 +17,13 @@ namespace Game.Combat.UI.UGUI
         private const float SelectedWidth = 58f;
         private const float SelectedHeight = 76f;
         private const float CentreX = 240f;
-        private const float TopY = 92f;
+        // The hand is drawn at 80% size. Resting cards end at BottomY, just above the hit badge (top at y = 221) that sits over the
+        // damage box / description at the bottom centre.
+        private const float Scale = 0.8f;
+        private const float BottomY = 219f;
         private const float LiftSelected = 6f;
         private const float RestingDrop = 12f;
-        private const float Step = 32f;
+        private const float Step = 26f; // centre-to-centre distance on screen (32 at full size)
         private const float SlideSpeed = 520f; // canvas units per second: one 32 px step takes about 0.06-0.12 s
 
         private class Slot
@@ -80,9 +83,10 @@ namespace Game.Combat.UI.UGUI
 
                 float width = selected ? SelectedWidth : CardWidth;
                 float height = selected ? SelectedHeight : CardHeight;
-                float top = TopY + (raised ? 0f : RestingDrop) - (selected ? LiftSelected + (SelectedHeight - CardHeight) * 0.5f : 0f);
+                float top = BottomY - height * Scale + (raised ? 0f : RestingDrop) - (selected ? LiftSelected : 0f);
                 slot.root.sizeDelta = new Vector2(width, height);
-                slot.target = new Vector2(Mathf.Round(CentreX + offset * Step - width * 0.5f), Mathf.Round(top));
+                slot.root.localScale = new Vector3(Scale, Scale, 1f);
+                slot.target = new Vector2(Mathf.Round(CentreX + offset * Step - width * Scale * 0.5f), Mathf.Round(top));
 
                 if (!slot.visible)
                 {

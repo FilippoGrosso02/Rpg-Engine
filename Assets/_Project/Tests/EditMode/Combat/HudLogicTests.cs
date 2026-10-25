@@ -201,15 +201,20 @@ namespace Game.Combat.Tests.EditMode
         public void CompactRollText_FitsTheReadoutAndSaysWhatHappened()
         {
             var hit = new DamageRollInfo { attackRoll = 9, attackBonus = 10, targetArmorClass = 13, hit = true, damageText = "d8+2", damage = 7 };
-            Assert.AreEqual("D12 9+10=19 VS AC13\nHIT D8+2 = 7 DMG", DamageRollBar.DescribeCompact(hit));
+            Assert.AreEqual("7", DamageRollBar.DescribeCompact(hit));
 
             var miss = new DamageRollInfo { attackRoll = 1, attackBonus = 10, targetArmorClass = 5, hit = false, naturalOne = true };
-            Assert.AreEqual("D12 1+10=11 VS AC5\nMISS (NAT 1)", DamageRollBar.DescribeCompact(miss));
+            Assert.AreEqual("MISS", DamageRollBar.DescribeCompact(miss));
 
-            foreach (var line in DamageRollBar.DescribeCompact(hit).Split('\n'))
-            {
-                Assert.LessOrEqual(PixelFont.MeasureLine(line), 130, $"'{line}' must fit the 130 px readout.");
-            }
+            Assert.LessOrEqual(PixelFont.MeasureLine(DamageRollBar.DescribeCompact(hit)), 130, "The final number must fit the 130 px readout.");
+        }
+
+        [Test]
+        public void DiceSumText_AddsTheModifierToTheDice()
+        {
+            Assert.AreEqual("5+2", DamageRollBar.SumText(new DamageRollInfo { diceTotal = 5, damageBonus = 2 }));
+            Assert.AreEqual("5-1", DamageRollBar.SumText(new DamageRollInfo { diceTotal = 5, damageBonus = 0, corrosionPenalty = 1 }));
+            Assert.AreEqual("9", DamageRollBar.SumText(new DamageRollInfo { diceTotal = 9 }));
         }
     }
 }

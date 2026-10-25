@@ -57,7 +57,7 @@ namespace Game.Combat.Tests.EditMode
 
             Assert.AreEqual(9, warrior.maxHp, "d8 + 1");
             Assert.AreEqual(14, warrior.ArmorClass, "6 + chain 7 + shield 1 + DEX 0");
-            Assert.AreEqual(10, warrior.attackBonus, "STR 10");
+            Assert.AreEqual(2, warrior.attackBonus, "STR 10 modifier");
             AssertDice(new DiceRoll(1, 8, 2), warrior.attackDamage); // sword d8 + 2
             Assert.AreEqual(8, warrior.saveVitality);
             Assert.AreEqual(5, warrior.saveMind);
@@ -72,8 +72,8 @@ namespace Game.Combat.Tests.EditMode
             var ranger = Hero("actor_ranger");
 
             Assert.AreEqual(8, ranger.maxHp, "d8 + 0");
-            Assert.AreEqual(12, ranger.ArmorClass, "6 + leather 4 + DEX 2");
-            Assert.AreEqual(10, ranger.attackBonus, "ranged attack uses DEX 10");
+            Assert.AreEqual(10, ranger.ArmorClass, "6 + leather 4 (DEX no longer counts)");
+            Assert.AreEqual(2, ranger.attackBonus, "ranged attack uses the DEX 10 modifier");
             AssertDice(new DiceRoll(1, 6, 0), ranger.attackDamage); // shortbow d6, no stat bonus
             Assert.AreEqual(7, ranger.saveVitality);
             Assert.AreEqual(6, ranger.saveMind);
@@ -88,7 +88,7 @@ namespace Game.Combat.Tests.EditMode
 
             Assert.AreEqual(4, wizard.maxHp, "d4 + 0");
             Assert.AreEqual(6, wizard.ArmorClass, "6 + no armor + DEX 0");
-            Assert.AreEqual(7, wizard.attackBonus, "thrown dagger attacks with DEX 7");
+            Assert.AreEqual(0, wizard.attackBonus, "thrown dagger attacks with the DEX 7 modifier");
             AssertDice(new DiceRoll(1, 4, -1), wizard.attackDamage); // dagger d4 + STR mod (-1) when thrown
             Assert.AreEqual(7, wizard.saveVitality);
             Assert.AreEqual(10, wizard.saveMind);
@@ -212,7 +212,7 @@ namespace Game.Combat.Tests.EditMode
         {
             PartyState.SetCorrosion("actor_ranger", armor: 9, weapon: 0); // leather is only worth 4
 
-            Assert.AreEqual(8, Hero("actor_ranger").ArmorClass); // 12 - 4
+            Assert.AreEqual(6, Hero("actor_ranger").ArmorClass); // 10 - 4
         }
     }
 }

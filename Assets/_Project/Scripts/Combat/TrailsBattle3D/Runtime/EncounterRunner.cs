@@ -30,6 +30,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         private const float MoveSpeed = 6f;
         private const float MaxReactionWait = 0.6f;
         private const float DefeatWait = 0.9f;
+        private const float ResultReadHold = 2f; // after impact; the damage dice animation (about 1.7 s) started at the click, so this leaves time to read the number
         private const float DefeatHideDelay = 0.8f;
 
         private readonly Dictionary<CombatantRuntime, List<AnimationAction>> _weaponAttackAnimations = new Dictionary<CombatantRuntime, List<AnimationAction>>();
@@ -89,6 +90,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         private CombatantRuntime _lastAimTarget;
         private int _lastAimChance = -1;
         private bool _lastAimBasic;
+        private string _lastAimDamageText;
         private bool _encounterOver;
         private bool _cursorStateSaved;
         private CursorLockMode _savedLockState;
@@ -393,6 +395,15 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 SavePartyState();
             }
 
+            if (result.victory)
+            {
+                // The grimoire learns every monster type the party just beat.
+                foreach (var enemy in _combatants.Where(c => !c.isPlayerSide && c.IsDefeated))
+                {
+                    Bestiary.RecordDefeat(enemy.definitionId);
+                }
+            }
+
             // Free the cursor so the result panel can be clicked.
             _encounterOver = true;
             OnEncounterEnded?.Invoke(result);
@@ -654,6 +665,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             CombatantRuntime aimed = null;
             int chance = 0;
             bool basic = false;
+            string damageText = null;
 
             if (targeting != null
                 && !_actionsSuspended
@@ -669,10 +681,11 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 if (skill != null)
                 {
                     chance = ActionResolver.GetHitChancePercent(actor, aimed, skill);
+                    damageText = (skill.usesWeaponDamage ? actor.attackDamage : skill.damage).ToString();
                 }
             }
 
-            if (aimed == _lastAimTarget && chance == _lastAimChance && basic == _lastAimBasic)
+            if (aimed == _lastAimTarget && chance == _lastAimChance && basic == _lastAimBasic && damageText == _lastAimDamageText)
             {
                 return;
             }
@@ -680,9 +693,10 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             _lastAimTarget = aimed;
             _lastAimChance = chance;
             _lastAimBasic = basic;
+            _lastAimDamageText = damageText;
             OnAimChanged?.Invoke(aimed == null
                 ? AimReadout.None
-                : new AimReadout { target = aimed, hitChancePercent = chance, isBasicAttack = basic });
+                : new AimReadout { target = aimed, hitChancePercent = chance, isBasicAttack = basic, damageText = damageText });
         }
 
         private void ClearAimReadout()
@@ -695,6 +709,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             _lastAimTarget = null;
             _lastAimChance = -1;
             _lastAimBasic = false;
+            _lastAimDamageText = null;
             OnAimChanged?.Invoke(AimReadout.None);
         }
 
@@ -1005,11 +1020,14 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         /// <summary>
         /// Plays the user's attack/skill animation, applies the skill's effects at the clip's
         /// impact moment, then plays hit / defeat reactions on whoever lost HP. Rules resolve in
-        /// <see cref="ExecuteSkill"/> exactly as before - this only decides *when*. Missing clips
+        /// <see cref="RollSkill"/>/<see cref="ApplySkill"/> exactly as before - this only decides *when*. Missing clips
         /// degrade to an immediate resolve, so a turn can never stall on animation data.
         /// </summary>
         private IEnumerator PerformSkill(CombatantRuntime actor, SkillDefinition skill, CombatantRuntime primaryTarget)
         {
+            // The dice are rolled the moment the attack starts, so the HUD's dice animation runs alongside the swing; HP only changes at impact.
+            var rolls = RollSkill(actor, skill, primaryTarget);
+
             var animator = GetAnimator(actor);
             var action = animator != null ? ResolveActionAnimation(actor, animator, skill) : null;
 
@@ -1036,7 +1054,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 hpBefore[c] = c.currentHp;
             }
 
-            ExecuteSkill(actor, skill, primaryTarget);
+            ApplySkill(actor, skill, rolls);
 
             float reactionWait = 0f;
             foreach (var c in _combatants)
@@ -1058,7 +1076,9 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 reactionWait = Mathf.Max(reactionWait, DefeatWait);
             }
 
-            var wait = Mathf.Max(duration - impact, reactionWait);
+            // Hold the turn long enough to read the damage roll and floating numbers, even when clips are missing or short.
+            var resultHold = autoPilotAllSides ? 0f : ResultReadHold;
+            var wait = Mathf.Max(duration - impact, reactionWait, resultHold);
             if (wait > 0f)
             {
                 yield return new WaitForSeconds(wait);
@@ -1112,16 +1132,32 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             }
         }
 
-        private void ExecuteSkill(CombatantRuntime actor, SkillDefinition skill, CombatantRuntime primaryTarget)
+        /// <summary>
+        /// Rolls the skill against everyone it hits and announces each result right away (the HUD starts its dice animation), without
+        /// touching HP yet - <see cref="ApplySkill"/> does that at the animation's impact moment.
+        /// </summary>
+        private List<DamageRollInfo> RollSkill(CombatantRuntime actor, SkillDefinition skill, CombatantRuntime primaryTarget)
+        {
+            var rolls = new List<DamageRollInfo>();
+            foreach (var target in ActionResolver.ResolveTargets(skill, actor, primaryTarget, _combatants))
+            {
+                var rollInfo = ActionResolver.ResolveAttack(actor, target, skill);
+                rolls.Add(rollInfo);
+                OnDamageRolled?.Invoke(rollInfo);
+            }
+
+            return rolls;
+        }
+
+        private void ApplySkill(CombatantRuntime actor, SkillDefinition skill, List<DamageRollInfo> rolls)
         {
             actor.currentAp = Mathf.Max(0, actor.currentAp - Mathf.Max(0, skill.apCost));
 
-            var targets = ActionResolver.ResolveTargets(skill, actor, primaryTarget, _combatants);
-            foreach (var target in targets)
+            foreach (var rollInfo in rolls)
             {
+                var target = rollInfo.target;
                 var wasAlive = !target.IsDefeated;
 
-                var rollInfo = ActionResolver.ResolveAttack(actor, target, skill);
                 if (rollInfo.damage > 0)
                 {
                     target.currentHp = Mathf.Max(0, target.currentHp - rollInfo.damage);
@@ -1134,7 +1170,6 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                     StatusEffectRuntime.TryApply(target, skill.statusEffectId, skill.statusEffectChance);
                 }
 
-                OnDamageRolled?.Invoke(rollInfo);
                 RaiseStateChanged(target);
 
                 if (wasAlive && target.IsSlain)
@@ -1278,9 +1313,10 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 runtime.position = spawnPoint != null ? spawnPoint.position : new Vector3(-i * 2f, 0f, -3f);
 
                 _combatants.Add(runtime);
-                if (!string.IsNullOrEmpty(actorDef.startingWeaponId))
+                var wornWeaponId = Loadout.GetWeaponId(actorDef);
+                if (!string.IsNullOrEmpty(wornWeaponId))
                 {
-                    var weapon = DatabaseRegistry.GetWeapon(actorDef.startingWeaponId);
+                    var weapon = DatabaseRegistry.GetWeapon(wornWeaponId);
                     if (weapon != null && weapon.basicAttackAnimations != null && weapon.basicAttackAnimations.Count > 0)
                     {
                         _weaponAttackAnimations[runtime] = weapon.basicAttackAnimations;
@@ -1331,7 +1367,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             int maxHp = OsrRules.MaxHitPoints(hitDie, actorDef.vitality);
 
             int armorBonus = 0;
-            foreach (var armorId in actorDef.startingArmorIds)
+            foreach (var armorId in Loadout.GetArmorIds(actorDef))
             {
                 var armor = DatabaseRegistry.GetArmor(armorId);
                 if (armor != null)
@@ -1340,7 +1376,8 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 }
             }
 
-            var weapon = string.IsNullOrEmpty(actorDef.startingWeaponId) ? null : DatabaseRegistry.GetWeapon(actorDef.startingWeaponId);
+            var wornWeaponId = Loadout.GetWeaponId(actorDef);
+            var weapon = string.IsNullOrEmpty(wornWeaponId) ? null : DatabaseRegistry.GetWeapon(wornWeaponId);
             bool ranged = weapon != null && weapon.isRanged;
             var dice = weapon != null ? weapon.damage : new DiceRoll(1, 3, 0); // bare hands: d3
             int strengthBonus = weapon == null || weapon.addsStrengthModifier ? OsrRules.Modifier(actorDef.strength) : 0;
@@ -1360,10 +1397,10 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 vitality = actorDef.vitality,
                 mind = actorDef.mind,
                 charm = actorDef.charm,
-                baseArmorClass = OsrRules.ArmorClass(armorBonus, actorDef.dexterity),
+                baseArmorClass = OsrRules.ArmorClass(armorBonus),
                 armorBonus = armorBonus,
                 armorCorrosion = Mathf.Min(corrosion.armor, armorBonus),
-                attackBonus = ranged ? actorDef.dexterity : actorDef.strength,
+                attackBonus = OsrRules.Modifier(ranged ? actorDef.dexterity : actorDef.strength),
                 attackDamage = new DiceRoll(dice.count, dice.sides, dice.bonus + strengthBonus),
                 weaponIsMetal = weapon != null && weapon.isMetal,
                 weaponCorrosion = corrosion.weapon,

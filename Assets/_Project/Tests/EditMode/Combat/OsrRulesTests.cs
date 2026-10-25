@@ -33,9 +33,9 @@ namespace Game.Combat.Tests.EditMode
         [Test]
         public void ArmorClass_MatchesTheTemplateHeroes()
         {
-            Assert.AreEqual(14, OsrRules.ArmorClass(armorBonus: 7 + 1, dexterity: 6), "Warrior: chain 7 + shield 1");
-            Assert.AreEqual(12, OsrRules.ArmorClass(armorBonus: 4, dexterity: 10), "Ranger: leather 4, DEX +2");
-            Assert.AreEqual(6, OsrRules.ArmorClass(armorBonus: 0, dexterity: 7), "Wizard: no armor");
+            Assert.AreEqual(14, OsrRules.ArmorClass(armorBonus: 7 + 1), "Warrior: chain 7 + shield 1");
+            Assert.AreEqual(10, OsrRules.ArmorClass(armorBonus: 4), "Ranger: leather 4 (DEX no longer counts)");
+            Assert.AreEqual(6, OsrRules.ArmorClass(armorBonus: 0), "Wizard: no armor");
         }
 
         [Test]
@@ -75,26 +75,26 @@ namespace Game.Combat.Tests.EditMode
 
         // "Monster hits vs. hero AC" table.
         [TestCase(5, 14, 33)] // Goblin vs Warrior
-        [TestCase(5, 12, 50)] // Goblin vs Ranger
+        [TestCase(5, 10, 67)] // Goblin vs Ranger (AC 10 now that DEX no longer counts)
         [TestCase(5, 6, 92)]  // Goblin vs Wizard
         [TestCase(8, 14, 58)] // Ogre vs Warrior
-        [TestCase(8, 12, 75)] // Ogre vs Ranger
+        [TestCase(8, 10, 92)] // Ogre vs Ranger
         [TestCase(8, 6, 92)]  // Ogre vs Wizard
         [TestCase(4, 14, 25)] // Slime vs Warrior
-        [TestCase(4, 12, 42)] // Slime vs Ranger
+        [TestCase(4, 10, 58)] // Slime vs Ranger
         [TestCase(4, 6, 92)]  // Slime vs Wizard
         public void MonsterHitChances_MatchTheMatchupTable(int attack, int heroAc, int expectedPercent)
         {
             Assert.AreEqual(expectedPercent, HitPercent(attack, heroAc));
         }
 
-        // "Hero hits vs. monster AC" table.
-        [TestCase(10, 9, 92)]  // Warrior vs Goblin
-        [TestCase(10, 13, 83)] // Warrior vs Ogre
-        [TestCase(10, 7, 92)]  // Warrior vs Slime
-        [TestCase(7, 9, 92)]   // Wizard (thrown dagger) vs Goblin
-        [TestCase(7, 13, 58)]  // Wizard vs Ogre
-        [TestCase(7, 7, 92)]   // Wizard vs Slime
+        // Hero hits vs. monster AC. Heroes attack with their ability MODIFIER now (Warrior STR 10 = +2, Wizard DEX 7 = +0), not the raw score.
+        [TestCase(2, 9, 50)]   // Warrior vs Goblin
+        [TestCase(2, 13, 17)]  // Warrior vs Ogre
+        [TestCase(2, 7, 67)]   // Warrior vs Slime
+        [TestCase(0, 9, 33)]   // Wizard (thrown dagger) vs Goblin
+        [TestCase(0, 13, 8)]   // Wizard vs Ogre
+        [TestCase(0, 7, 50)]   // Wizard vs Slime
         public void HeroHitChances_MatchTheMatchupTable(int attack, int monsterAc, int expectedPercent)
         {
             Assert.AreEqual(expectedPercent, HitPercent(attack, monsterAc));

@@ -35,11 +35,12 @@ namespace Game.Combat.UI.UGUI
             }
         }
 
-        public void SetState(MenuState state)
+        /// <param name="lockedByPlayerAction">The menu is locked because the player's own action is resolving, so it isn't the enemy's turn yet.</param>
+        public void SetState(MenuState state, bool lockedByPlayerAction = false)
         {
-            bool enemy = state == MenuState.Locked;
+            bool enemy = state == MenuState.Locked && !lockedByPlayerAction;
             ribbon.sprite = sprites.Get(enemy ? "ribbon_red" : "ribbon_gold");
-            label.text = TextFor(state);
+            label.text = state == MenuState.Locked && lockedByPlayerAction ? "" : TextFor(state);
             // Nothing to say in the plain root menu (no "YOUR TURN" banner): hide the ribbon entirely.
             ribbon.enabled = label.text.Length > 0;
         }

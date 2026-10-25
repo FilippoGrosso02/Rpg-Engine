@@ -188,6 +188,8 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             var dice = isSpell ? skill.damage : attacker.attackDamage;
             info.damageText = dice.ToString();
             info.damageBonus = dice.bonus;
+            info.diceCount = dice.HasDice ? dice.count : 0;
+            info.diceSides = dice.HasDice ? dice.sides : 0;
             int damage = 0;
             if (dice.HasDice || dice.bonus != 0)
             {
