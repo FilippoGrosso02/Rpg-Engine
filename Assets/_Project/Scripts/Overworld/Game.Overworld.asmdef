@@ -5,7 +5,8 @@
         "Game.Data",
         "Game.Common",
         "Game.Combat.Contracts",
-        "Game.Services"
+        "Game.Services",
+        "Unity.Cinemachine"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

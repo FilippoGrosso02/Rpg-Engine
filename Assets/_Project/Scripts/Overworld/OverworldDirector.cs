@@ -83,7 +83,9 @@ namespace Game.Overworld
                 PartyState.HealAll();
                 if (player != null && respawnPoint != null) player.Teleport(respawnPoint.position);
                 var cam = FindAnyObjectByType<TopDownCamera>();
-                if (cam != null) cam.Snap();
+                if (cam != null && cam.isActiveAndEnabled) cam.Snap();
+                var rig = FindAnyObjectByType<OverworldCameraRig>();
+                if (rig != null) rig.SnapBehind();
                 foreach (var e in enemies) e.ResetToStart();
             }
 

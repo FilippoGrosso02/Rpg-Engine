@@ -16,7 +16,7 @@ MonoBehaviour:
   displayName: Archer
   sprite: {fileID: 0}
   battleModelPrefab: {fileID: 7695955738425482828, guid: 3818a30cb8297a24f947ec04c8976f34, type: 3}
-  animationSet: {fileID: 11400000, guid: 18cb63096f4bb1b468bd357639bb7112, type: 2}
+  animationSet: {fileID: 11400000, guid: e64fd5e157d8d334cad88a174cf06cc6, type: 2}
   hp: 22
   armorClass: 13
   attackBonus: 8
