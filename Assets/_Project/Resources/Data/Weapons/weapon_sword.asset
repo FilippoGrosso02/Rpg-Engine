@@ -13,16 +13,16 @@ MonoBehaviour:
   m_Name: weapon_sword
   m_EditorClassIdentifier: Game.Data::Game.Data.Definitions.WeaponDefinition
   id: weapon_sword
-  displayName: Sword
+  displayName: Shortsword
   description: 
   icon: {fileID: 0}
   equipSlot: 0
   damage:
     count: 1
-    sides: 8
+    sides: 6
     bonus: 0
   isRanged: 0
-  addsStrengthModifier: 1
+  attackModifier: 0
   isMetal: 1
   damageType: 0
   basicAttackAnimations: []

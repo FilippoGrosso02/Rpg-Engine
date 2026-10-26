@@ -20,7 +20,7 @@ namespace Game.Combat.Tests.EditMode
             return new CombatantRuntime { attackBonus = attackBonus };
         }
 
-        private static CombatantRuntime Target(int armorClass, int save = 5)
+        private static CombatantRuntime Target(int armorClass, int save = 7)
         {
             return new CombatantRuntime { baseArmorClass = armorClass, saveVitality = save, saveMind = save };
         }
@@ -32,11 +32,12 @@ namespace Game.Combat.Tests.EditMode
             return skill;
         }
 
-        [TestCase(10, 9, 92)]  // Warrior vs Goblin: only a natural 1 misses
-        [TestCase(10, 13, 83)] // Warrior vs Ogre
-        [TestCase(7, 13, 58)]  // Wizard's thrown dagger vs Ogre
-        [TestCase(5, 14, 33)]  // Goblin vs Warrior
-        public void HitChance_ForAWeaponAttack_IsTheShareOfD12RollsThatReachArmorClass(int attackBonus, int armorClass, int expected)
+        [TestCase(10, 4, 90)]  // Warrior vs Goblin: capped at 90%
+        [TestCase(10, 8, 70)]  // Warrior vs Ogre: gap +2
+        [TestCase(9, 8, 60)]   // Wizard's thrown dagger vs Ogre: gap +1
+        [TestCase(7, 7, 50)]   // Goblin vs Warrior: even odds
+        [TestCase(2, 12, 10)]  // Hopeless gap: only a natural 10 hits
+        public void HitChance_ForAWeaponAttack_IsTheShareOfD10RollsThatReachSix(int attackBonus, int armorClass, int expected)
         {
             var skill = BasicAttack();
 
@@ -61,11 +62,12 @@ namespace Game.Combat.Tests.EditMode
         {
             var web = ScriptableObject.CreateInstance<SkillDefinition>();
             web.saveType = SaveType.Vitality;
+            web.saveDifficulty = 7;
 
-            // d12 + 7 >= 12 passes on 5+, so it fails on 1-4: 4/12 = 33%.
-            Assert.AreEqual(33, ActionResolver.GetHitChancePercent(Attacker(0), Target(9, save: 7), web));
-            // d12 + 4 >= 12 passes on 8+, so it fails on 1-7: 7/12 = 58%.
-            Assert.AreEqual(58, ActionResolver.GetHitChancePercent(Attacker(0), Target(9, save: 4), web));
+            // d10 + 7 - 7 >= 6 passes on 6+, so it fails on 1-5: 50%.
+            Assert.AreEqual(50, ActionResolver.GetHitChancePercent(Attacker(0), Target(9, save: 7), web));
+            // d10 + 4 - 7 >= 6 passes on 9+, so it fails on 1-8: 80%.
+            Assert.AreEqual(80, ActionResolver.GetHitChancePercent(Attacker(0), Target(9, save: 4), web));
 
             Object.DestroyImmediate(web);
         }
@@ -74,13 +76,13 @@ namespace Game.Combat.Tests.EditMode
         public void HitChance_UsesGuardAndCorrosionLikeTheRealAttackDoes()
         {
             var skill = BasicAttack();
-            var target = Target(12);
+            var target = Target(7);
             int plain = ActionResolver.GetHitChancePercent(Attacker(8), target, skill);
 
             target.guarding = true;
             int guarded = ActionResolver.GetHitChancePercent(Attacker(8), target, skill);
 
-            Assert.Less(guarded, plain, "Guard raises AC by 2, so the badge must show a lower chance.");
+            Assert.Less(guarded, plain, "Guard raises DEF by 2, so the badge must show a lower chance.");
 
             Object.DestroyImmediate(skill);
         }

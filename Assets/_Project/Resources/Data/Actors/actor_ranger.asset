@@ -16,13 +16,13 @@ MonoBehaviour:
   displayName: Ranger
   portrait: {fileID: 0}
   battleModelPrefab: {fileID: 4440533481374886727, guid: de76c05b573741045829cfbddddfb642, type: 3}
-  animationSet: {fileID: 11400000, guid: e64fd5e157d8d334cad88a174cf06cc6, type: 2}
+  animationSet: {fileID: 11400000, guid: 0f70efe80fbb776498dd596a49cb0334, type: 2}
   classId: class_ranger
   strength: 7
   dexterity: 10
-  vitality: 7
-  mind: 6
-  charm: 5
+  vitality: 8
+  mind: 7
+  charm: 7
   level: 1
   moveRange: 6
   attackRangeMultiplier: 5

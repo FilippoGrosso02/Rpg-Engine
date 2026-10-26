@@ -17,4 +17,4 @@ MonoBehaviour:
   description: 
   icon: {fileID: 0}
   equipSlot: 3
-  acBonus: 4
+  acBonus: 2

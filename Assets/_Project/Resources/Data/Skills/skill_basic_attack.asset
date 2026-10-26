@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Game.Data::Game.Data.Definitions.SkillDefinition
   id: skill_basic_attack
   displayName: Attack
-  description: 'Attack with your weapon: d12 + attack against armor class.'
+  description: 'Attack with your weapon: d10 + ATK - DEF must reach 6.'
   icon: {fileID: 0}
   actionCost: 0
   targetType: 0
@@ -32,6 +32,7 @@ MonoBehaviour:
     bonus: 0
   autoHit: 0
   saveType: 0
+  saveDifficulty: 7
   halfDamageOnSave: 0
   statusEffectId: 
   statusEffectChance: 0

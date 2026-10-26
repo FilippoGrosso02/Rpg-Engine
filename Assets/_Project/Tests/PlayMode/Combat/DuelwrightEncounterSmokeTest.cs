@@ -9,9 +9,9 @@ using UnityEngine.TestTools;
 namespace Game.Combat.Tests.PlayMode
 {
     /// <summary>
-    /// Runs the real OSR roster (Warrior, Ranger and Wizard against goblins and an ogre — not the legacy Test Hero/Slime fixture)
-    /// through a full autopilot encounter — exercises the d12 initiative scheduler, attack rolls against AC, the Wizard's AP and
-    /// spells (saves, Web, Fireball), monster morale and fleeing, and melee/ranged gating, end to end.
+    /// Runs the real OSR roster (Warrior, Ranger and Thief against goblins and an ogre — not the legacy Test Hero/Slime fixture)
+    /// through a full autopilot encounter — exercises the d10 initiative scheduler, attack rolls against DEF, monster morale and
+    /// fleeing, and melee/ranged gating, end to end.
     /// (The class keeps its old name so the test's history stays attached.)
     /// </summary>
     public class DuelwrightEncounterSmokeTest

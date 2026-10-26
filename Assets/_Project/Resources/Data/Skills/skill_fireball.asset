@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Game.Data::Game.Data.Definitions.SkillDefinition
   id: skill_fireball
   displayName: Fireball
-  description: Level 3. Everything within 10 ft takes 2d6; a save (d12 + VIT >= 12) halves it.
+  description: Level 3. Everything within 10 ft takes 2d6; a save (d10 + VIT - DV 7 >= 6) halves it.
   icon: {fileID: 0}
   actionCost: 0
   targetType: 3
@@ -32,6 +32,7 @@ MonoBehaviour:
     bonus: 0
   autoHit: 0
   saveType: 1
+  saveDifficulty: 7
   halfDamageOnSave: 1
   statusEffectId: 
   statusEffectChance: 1

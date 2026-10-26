@@ -22,7 +22,7 @@ MonoBehaviour:
     sides: 6
     bonus: 0
   isRanged: 1
-  addsStrengthModifier: 0
+  attackModifier: 0
   isMetal: 0
   damageType: 1
   basicAttackAnimations:

@@ -7,8 +7,11 @@ namespace Game.Data.Definitions
     [CreateAssetMenu(fileName = "NewClass", menuName = "Database/Class")]
     public class ClassDefinition : GameDefinition
     {
-        /// <summary>Hit die size (Warrior d8, Ranger d8, Wizard d4). Level-1 hit points are the die at its maximum plus the VIT modifier.</summary>
+        /// <summary>Hit die size (fighter d8, cleric d6, thief d6, caster d4). Level-1 hit points are the die at its maximum plus the VIT minor modifier.</summary>
         public int hitDieSides = 8;
+
+        /// <summary>Evade classes (thieves, rangers) add their DEX minor modifier to DEF; every other class gets no DEX bonus.</summary>
+        public bool evadesWithDex;
 
         public List<SkillUnlock> skillUnlocks = new List<SkillUnlock>();
 

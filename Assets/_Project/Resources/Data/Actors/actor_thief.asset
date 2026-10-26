@@ -10,28 +10,26 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4e9ee9e9e22101c449e08cbf03d64645, type: 3}
-  m_Name: actor_wizard
+  m_Name: actor_thief
   m_EditorClassIdentifier: Game.Data::Game.Data.Definitions.ActorDefinition
-  id: actor_wizard
-  displayName: Wizard
+  id: actor_thief
+  displayName: Thief
   portrait: {fileID: 0}
-  battleModelPrefab: {fileID: 1757396823714094405, guid: 6169a22fb6a19e840b98fb7f73e8831f, type: 3}
+  battleModelPrefab: {fileID: 4521009724105039837, guid: fcaa8daf7ce3c734db30ef9192a3d396, type: 3}
   animationSet: {fileID: 11400000, guid: 0f70efe80fbb776498dd596a49cb0334, type: 2}
-  classId: class_wizard
-  strength: 4
-  dexterity: 7
+  classId: class_thief
+  strength: 9
+  dexterity: 9
   vitality: 7
-  mind: 10
+  mind: 7
   charm: 7
   level: 1
   moveRange: 6
-  attackRangeMultiplier: 3
-  usesAp: 1
-  roleLabel: Fragile caster
+  attackRangeMultiplier: 1
+  usesAp: 0
+  roleLabel: Quick skirmisher
   startingSkillIds:
   - skill_basic_attack
-  - skill_magic_missile
-  - skill_web
-  - skill_fireball
   startingWeaponId: weapon_dagger
-  startingArmorIds: []
+  startingArmorIds:
+  - armor_leather

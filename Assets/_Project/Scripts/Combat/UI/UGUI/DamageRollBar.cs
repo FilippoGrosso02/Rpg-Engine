@@ -6,8 +6,8 @@ using UnityEngine.UI;
 namespace Game.Combat.UI.UGUI
 {
     /// <summary>
-    /// The damage calculation box at the bottom centre: a two-line readout of how the most recent attack or spell resolved — the d12
-    /// attack roll against AC, the damage dice, any save. It appears after each attack and hides itself after a few seconds;
+    /// The damage calculation box at the bottom centre: a two-line readout of how the most recent attack or spell resolved — the d10
+    /// attack roll against DEF, the damage dice, any save. It appears after each attack and hides itself after a few seconds;
     /// overlapping results (a Fireball hitting several targets) just replace it.
     /// </summary>
     public class DamageRollBar : MonoBehaviour
@@ -195,7 +195,7 @@ namespace Game.Combat.UI.UGUI
 
             if (info.attackRoll > 0)
             {
-                string total = $"d12 {info.attackRoll} + {info.attackBonus} = {info.attackRoll + info.attackBonus} vs AC {info.targetArmorClass}";
+                string total = $"d10 {info.attackRoll} + ATK {info.attackBonus} − DEF {info.targetArmorClass} = {info.attackRoll + info.attackBonus - info.targetArmorClass} vs 6";
                 if (!info.hit)
                 {
                     string why = info.naturalOne ? " (natural 1)" : "";
@@ -203,13 +203,13 @@ namespace Game.Combat.UI.UGUI
                 }
 
                 string acid = info.corrosionPenalty > 0 ? $" (−{info.corrosionPenalty} corroded)" : "";
-                string nat = info.naturalTwelve ? " natural 12!" : "";
+                string nat = info.naturalTen ? " natural 10!" : "";
                 return $"{subject}  {total} — HIT{nat}  {info.damageText}{acid} = {info.damage} dmg";
             }
 
             if (info.hasSave)
             {
-                string save = $"save d12 {info.saveRoll} + {info.saveBonus} = {info.saveRoll + info.saveBonus} vs 12";
+                string save = $"save d10 {info.saveRoll} + {info.saveBonus} − DV {info.saveDifficulty} = {info.saveRoll + info.saveBonus - info.saveDifficulty} vs 6";
                 string damage = info.damageText != null && info.damageText != "0" ? $"{info.damageText}: " : "";
 
                 if (!info.savePassed)

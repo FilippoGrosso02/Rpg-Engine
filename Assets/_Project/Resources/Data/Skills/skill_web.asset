@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Game.Data::Game.Data.Definitions.SkillDefinition
   id: skill_web
   displayName: Web
-  description: Level 2. The target saves (d12 + VIT >= 12) or is stuck for 2 turns.
+  description: Level 2. The target saves (d10 + VIT - DV 8 >= 6) or is stuck for 2 turns.
   icon: {fileID: 0}
   actionCost: 0
   targetType: 0
@@ -32,6 +32,7 @@ MonoBehaviour:
     bonus: 0
   autoHit: 0
   saveType: 1
+  saveDifficulty: 8
   halfDamageOnSave: 0
   statusEffectId: status_stuck
   statusEffectChance: 1

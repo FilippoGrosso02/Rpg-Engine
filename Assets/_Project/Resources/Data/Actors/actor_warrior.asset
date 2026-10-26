@@ -19,10 +19,10 @@ MonoBehaviour:
   animationSet: {fileID: 11400000, guid: 0f70efe80fbb776498dd596a49cb0334, type: 2}
   classId: class_warrior
   strength: 10
-  dexterity: 6
+  dexterity: 7
   vitality: 8
-  mind: 5
-  charm: 6
+  mind: 7
+  charm: 7
   level: 1
   moveRange: 6
   attackRangeMultiplier: 1

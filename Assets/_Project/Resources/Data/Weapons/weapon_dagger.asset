@@ -21,8 +21,8 @@ MonoBehaviour:
     count: 1
     sides: 4
     bonus: 0
-  isRanged: 1
-  addsStrengthModifier: 1
+  isRanged: 0
+  attackModifier: 2
   isMetal: 1
   damageType: 1
   basicAttackAnimations: []

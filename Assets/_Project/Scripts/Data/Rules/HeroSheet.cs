@@ -8,7 +8,7 @@ namespace Game.Data.Rules
 {
     /// <summary>
     /// A hero's numbers as the menus show them: the same derivation combat uses when it builds an ally (HP from the hit die and VIT,
-    /// AC from the armor worn, attack from the ability modifier, damage from the weapon wielded), read from the worn gear in
+    /// DEF from the armor worn, ATK from the ability score and weapon, damage from the weapon die), read from the worn gear in
     /// <see cref="Loadout"/> and the remembered HP in <see cref="PartyState"/>.
     /// </summary>
     public sealed class HeroSheet
@@ -41,6 +41,7 @@ namespace Game.Data.Rules
 
             var classDef = DatabaseRegistry.GetClass(actor.classId);
             int hitDie = classDef != null ? classDef.hitDieSides : 8;
+            bool evades = classDef != null && classDef.evadesWithDex;
             int maxHp = OsrRules.MaxHitPoints(hitDie, actor.vitality);
 
             int armorBonus = 0;
@@ -58,7 +59,7 @@ namespace Game.Data.Rules
             var weapon = string.IsNullOrEmpty(weaponId) ? null : DatabaseRegistry.GetWeapon(weaponId);
             bool ranged = weapon != null && weapon.isRanged;
             var dice = weapon != null ? weapon.damage : new DiceRoll(1, 3, 0); // bare hands: d3
-            int strengthBonus = weapon == null || weapon.addsStrengthModifier ? OsrRules.Modifier(actor.strength) : 0;
+            int weaponAttack = weapon != null ? weapon.attackModifier : 0;
             var corrosion = PartyState.GetCorrosion(actor.id);
 
             sheet.id = actor.id;
@@ -68,9 +69,10 @@ namespace Game.Data.Rules
             sheet.level = actor.level;
             sheet.maxHp = maxHp;
             sheet.currentHp = PartyState.GetStartingHp(actor.id, maxHp);
-            sheet.armorClass = OsrRules.ArmorClass(armorBonus) - Mathf.Min(corrosion.armor, armorBonus);
-            sheet.attackBonus = OsrRules.Modifier(ranged ? actor.dexterity : actor.strength);
-            sheet.damageText = new DiceRoll(dice.count, dice.sides, dice.bonus + strengthBonus).ToString();
+            sheet.armorClass = Mathf.Max(OsrRules.MinDefense,
+                OsrRules.Defense(armorBonus, actor.dexterity, evades) - Mathf.Min(corrosion.armor, armorBonus));
+            sheet.attackBonus = (ranged ? actor.dexterity : actor.strength) + weaponAttack;
+            sheet.damageText = dice.ToString();
             sheet.weaponName = weapon != null ? weapon.displayName : "";
             sheet.strength = actor.strength;
             sheet.dexterity = actor.dexterity;

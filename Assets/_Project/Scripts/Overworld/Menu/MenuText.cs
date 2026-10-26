@@ -24,32 +24,32 @@ namespace Game.Overworld.Menu
             new Topic
             {
                 title = "ATTACKS",
-                body = "ROLL A D12 AND ADD YOUR ATTACK BONUS. IF THE TOTAL MEETS OR BEATS THE TARGET'S ARMOR CLASS (AC), THE ATTACK HITS.\n\n"
-                    + "A NATURAL 1 ALWAYS MISSES AND A NATURAL 12 ALWAYS HITS.\n\n"
-                    + "A HERO'S ATTACK BONUS IS AN ABILITY MODIFIER: STRENGTH FOR MELEE WEAPONS, DEXTERITY FOR BOWS AND THROWN WEAPONS."
+                body = "ROLL A D10, ADD YOUR ATK AND SUBTRACT THE TARGET'S DEF. A TOTAL OF 6 OR MORE HITS. EQUAL ATK AND DEF IS A 50% CHANCE, AND EACH POINT OF DIFFERENCE IS 10%.\n\n"
+                    + "A NATURAL 1 ALWAYS MISSES AND A NATURAL 10 ALWAYS HITS, SO THE CHANCE IS NEVER BELOW 10% OR ABOVE 90%.\n\n"
+                    + "ATK IS YOUR STRENGTH FOR MELEE WEAPONS OR YOUR DEXTERITY FOR BOWS AND THROWN WEAPONS, PLUS THE WEAPON'S ATK MODIFIER: LIGHT WEAPONS ADD, HEAVY WEAPONS SUBTRACT."
             },
             new Topic
             {
                 title = "ABILITIES",
-                body = "EVERY HERO HAS STR, DEX, VIT, MIND AND CHARM SCORES. A SCORE OF 6 IS AVERAGE.\n\n"
-                    + "THE MODIFIER IS (SCORE - 6) / 2, ROUNDED DOWN. SO 10 GIVES +2, 7 GIVES +0 AND 5 GIVES -1."
+                body = "EVERY HERO HAS STR, DEX, VIT, MIND AND CHARM SCORES FROM 2 TO 12. A SCORE OF 7 IS AVERAGE.\n\n"
+                    + "THE MINOR MODIFIER IS -3 AT 2, -2 AT 3-4, -1 AT 5-6, 0 AT 7, +1 AT 8-9, +2 AT 10-11 AND +3 AT 12. IT SETS HIT POINTS AND INITIATIVE."
             },
             new Topic
             {
-                title = "ARMOR CLASS",
-                body = "AC IS 6 PLUS THE ARMOR YOU WEAR (CHAIN MAIL +7, LEATHER +4, SHIELD +1). DEXTERITY DOES NOT COUNT FOR NOW.\n\n"
-                    + "GUARDING ADDS +2 AC UNTIL YOUR NEXT TURN."
+                title = "DEFENSE",
+                body = "DEF IS 2 PLUS THE ARMOR AND SHIELD YOU WEAR (LEATHER +2, CHAIN MAIL +4, PLATE +6, SHIELD +1), AND NEVER BELOW 2.\n\n"
+                    + "EVADE CLASSES (THIEVES AND RANGERS) ALSO ADD THEIR DEX MINOR MODIFIER. GUARDING ADDS +2 DEF UNTIL YOUR NEXT TURN."
             },
             new Topic
             {
                 title = "DAMAGE",
-                body = "A HIT ROLLS THE WEAPON'S DICE (D8 FOR A SWORD, D4 FOR A DAGGER) AND ADDS YOUR STRENGTH MODIFIER. BOWS DO NOT ADD IT.\n\n"
+                body = "A HIT ROLLS THE WEAPON'S DIE (D4 FOR A DAGGER, D6 FOR A SHORTSWORD, D12 FOR A GREATAXE). NOTHING IS ADDED.\n\n"
                     + "A HIT ALWAYS DOES AT LEAST 1 DAMAGE."
             },
             new Topic
             {
                 title = "SAVES",
-                body = "SOME SPELLS CALL FOR A SAVE: ROLL A D12 AND ADD THE TARGET'S VITALITY (OR MIND). A TOTAL OF 12 OR MORE SAVES.\n\n"
+                body = "EVERY EFFECT HAS A DIFFICULTY VALUE (DV). ROLL A D10, ADD YOUR VITALITY (OR MIND) AND SUBTRACT THE DV. A TOTAL OF 6 OR MORE SAVES. A NATURAL 1 ALWAYS FAILS AND A NATURAL 10 ALWAYS SAVES.\n\n"
                     + "A FAILED SAVE AGAINST WEB LEAVES YOU STUCK. FIREBALL DOES HALF DAMAGE ON A SAVE."
             },
             new Topic
@@ -61,7 +61,7 @@ namespace Game.Overworld.Menu
             new Topic
             {
                 title = "TURNS",
-                body = "EACH ROUND EVERYONE ROLLS A D12 AND ADDS THEIR DEXTERITY. THE HIGHEST ACTS FIRST.\n\n"
+                body = "WHEN A FIGHT STARTS EVERYONE ROLLS A D10 AND ADDS THEIR DEX MODIFIER. THE HIGHEST ACTS FIRST, TIES GO TO THE HIGHER DEX, AND THE ORDER STAYS THE SAME EVERY ROUND.\n\n"
                     + "ON YOUR TURN YOU CAN WALK UP TO YOUR MOVE RANGE AND THEN ACT: ATTACK, CAST A SPELL, GUARD OR FLEE."
             },
             new Topic
@@ -73,7 +73,7 @@ namespace Game.Overworld.Menu
             new Topic
             {
                 title = "ACID",
-                body = "SLIMES CORRODE. AN ARMORED HERO HIT BY A SLIME LOSES 1 AC, AND A METAL WEAPON THAT HITS ONE LOSES 1 DAMAGE.\n\n"
+                body = "SLIMES CORRODE. AN ARMORED HERO HIT BY A SLIME LOSES 1 DEF, AND A METAL WEAPON THAT HITS ONE LOSES 1 DAMAGE.\n\n"
                     + "THE DAMAGE STAYS UNTIL THE PARTY RESTS."
             }
         };
@@ -144,7 +144,7 @@ namespace Game.Overworld.Menu
             var text = new StringBuilder();
             text.Append("STR ").Append(Ability(hero.strength)).Append("   DEX ").Append(Ability(hero.dexterity)).Append("   VIT ").Append(Ability(hero.vitality)).Append('\n');
             text.Append("MIND ").Append(Ability(hero.mind)).Append("   CHARM ").Append(Ability(hero.charm)).Append("\n\n");
-            text.Append("AC ").Append(hero.armorClass).Append("   ATTACK ").Append(Signed(hero.attackBonus)).Append("   DAMAGE ").Append(hero.damageText.ToUpperInvariant()).Append("\n\n");
+            text.Append("DEF ").Append(hero.armorClass).Append("   ATK ").Append(hero.attackBonus).Append("   DAMAGE ").Append(hero.damageText.ToUpperInvariant()).Append("\n\n");
             text.Append("WEAPON: ").Append(string.IsNullOrEmpty(hero.weaponName) ? "NONE" : hero.weaponName.ToUpperInvariant()).Append('\n');
             text.Append("ARMOR: ").Append(hero.armorNames.Count == 0 ? "NONE" : string.Join(", ", hero.armorNames).ToUpperInvariant()).Append("\n\n");
 
@@ -170,9 +170,9 @@ namespace Game.Overworld.Menu
             var text = new StringBuilder();
             if (!string.IsNullOrEmpty(enemy.roleLabel)) text.Append(enemy.roleLabel.ToUpperInvariant()).Append("\n\n");
 
-            text.Append("HP ").Append(enemy.hp).Append("   AC ").Append(enemy.armorClass).Append('\n');
-            text.Append("ATTACK ").Append(Signed(enemy.attackBonus)).Append("   DAMAGE ").Append(enemy.damage.ToString().ToUpperInvariant()).Append('\n');
-            text.Append("MOVE ").Append(enemy.moveRange).Append("   SAVE ").Append(Signed(enemy.saveBonus)).Append('\n');
+            text.Append("HP ").Append(enemy.hp).Append("   DEF ").Append(enemy.armorClass).Append('\n');
+            text.Append("ATK ").Append(enemy.attackBonus).Append("   DAMAGE ").Append(enemy.damage.ToString().ToUpperInvariant()).Append('\n');
+            text.Append("MOVE ").Append(enemy.moveRange).Append("   SAVE ").Append(enemy.saveBonus).Append('\n');
             text.Append("MORALE ").Append(enemy.morale > 0 ? enemy.morale.ToString() : "MINDLESS").Append("\n\n");
 
             var traits = new List<string>();

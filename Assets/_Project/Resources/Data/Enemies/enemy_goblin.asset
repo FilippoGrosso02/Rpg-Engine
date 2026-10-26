@@ -18,15 +18,15 @@ MonoBehaviour:
   battleModelPrefab: {fileID: 5830655489261427691, guid: c92e5bf9846ce444d8d923ec1e5e0e17, type: 3}
   animationSet: {fileID: 11400000, guid: 18cb63096f4bb1b468bd357639bb7112, type: 2}
   hp: 5
-  armorClass: 9
-  attackBonus: 5
+  armorClass: 4
+  attackBonus: 7
   damage:
     count: 1
     sides: 6
     bonus: 0
   morale: 7
-  initiative: 7
-  saveBonus: 5
+  dexterity: 8
+  saveBonus: 7
   corrodesArmor: 0
   corrodesWeapons: 0
   immuneToCharm: 0

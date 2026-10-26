@@ -16,7 +16,7 @@ MonoBehaviour:
   partyActorIds:
   - actor_warrior
   - actor_ranger
-  - actor_wizard
+  - actor_thief
   enemyIds:
   - enemy_goblin
   - enemy_goblin

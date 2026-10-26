@@ -44,8 +44,11 @@ namespace Game.Data.Definitions
         /// <summary>Magic Missile: skips the attack roll entirely and always hits.</summary>
         public bool autoHit;
 
-        /// <summary>The target may roll this save (d12 + score >= 12) to resist.</summary>
+        /// <summary>The target may roll this save (d10 + VIT or MIND against <see cref="saveDifficulty"/>) to resist.</summary>
         public SaveType saveType;
+
+        /// <summary>The save's difficulty value (DV): the target's stat is the chance, 50% when it equals the DV.</summary>
+        public int saveDifficulty = 7;
 
         /// <summary>On a passed save the target takes half damage (Fireball). If false, a passed save negates the spell (Web).</summary>
         public bool halfDamageOnSave;

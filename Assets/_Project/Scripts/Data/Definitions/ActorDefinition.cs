@@ -5,8 +5,8 @@ using UnityEngine;
 namespace Game.Data.Definitions
 {
     /// <summary>
-    /// A playable hero under the d12 OSR rules: five ability scores, a class (hit die and spell list), and starting gear.
-    /// Everything combat needs (hit points, armor class, attack bonus, damage) is derived from these, never stored.
+    /// A playable hero under the d10 OSR rules: five ability scores (2-12), a class (hit die, evade flag and spell list), and
+    /// starting gear. Everything combat needs (hit points, DEF, ATK, damage) is derived from these, never stored.
     /// </summary>
     [CreateAssetMenu(fileName = "NewActor", menuName = "Database/Actor")]
     public class ActorDefinition : GameDefinition
@@ -16,12 +16,12 @@ namespace Game.Data.Definitions
         public AnimationSetDefinition animationSet;
         public string classId;
 
-        [Header("Ability scores (start at 6, prime stat up to 10)")]
-        public int strength = 6;
-        public int dexterity = 6;
-        public int vitality = 6;
-        public int mind = 6;
-        public int charm = 6;
+        [Header("Ability scores (start at 7, spend 4 points, max 10; the prime stat may reach 11)")]
+        public int strength = 7;
+        public int dexterity = 7;
+        public int vitality = 7;
+        public int mind = 7;
+        public int charm = 7;
 
         public int level = 1;
 
@@ -44,7 +44,7 @@ namespace Game.Data.Definitions
 
         public string startingWeaponId;
 
-        /// <summary>Worn armor pieces (body armor and shield are separate items); their AC bonuses add up.</summary>
+        /// <summary>Worn armor pieces (body armor and shield are separate items); their DEF bonuses add up.</summary>
         public List<string> startingArmorIds = new List<string>();
 
         public int StrengthModifier => OsrRules.Modifier(strength);

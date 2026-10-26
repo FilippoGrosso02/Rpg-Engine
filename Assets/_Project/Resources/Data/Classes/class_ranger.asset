@@ -15,4 +15,5 @@ MonoBehaviour:
   id: class_ranger
   displayName: Ranger
   hitDieSides: 8
+  evadesWithDex: 1
   skillUnlocks: []

@@ -15,4 +15,5 @@ MonoBehaviour:
   id: class_warrior
   displayName: Warrior
   hitDieSides: 8
+  evadesWithDex: 0
   skillUnlocks: []

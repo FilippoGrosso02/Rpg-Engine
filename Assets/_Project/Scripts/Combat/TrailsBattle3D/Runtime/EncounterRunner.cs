@@ -1357,13 +1357,15 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         }
 
         /// <summary>
-        /// Derives a hero's combat numbers from the d12 sheet: HP = hit die (max) + VIT modifier, AC = 6 + armor + DEX modifier,
-        /// attack = STR (melee) or DEX (ranged) score, damage = weapon dice + STR modifier (bows excepted), initiative = DEX.
+        /// Derives a hero's combat numbers from the d10 sheet: HP = hit die (max) + VIT minor modifier, DEF = 2 + armor + shield
+        /// (+ DEX minor modifier for evade classes), ATK = STR (melee) or DEX (ranged) score + the weapon's ATK modifier,
+        /// damage = the weapon die only, initiative = DEX minor modifier.
         /// </summary>
         public static CombatantRuntime BuildAllyRuntime(ActorDefinition actorDef)
         {
             var classDef = DatabaseRegistry.GetClass(actorDef.classId);
             int hitDie = classDef != null ? classDef.hitDieSides : 8;
+            bool evades = classDef != null && classDef.evadesWithDex;
             int maxHp = OsrRules.MaxHitPoints(hitDie, actorDef.vitality);
 
             int armorBonus = 0;
@@ -1380,7 +1382,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             var weapon = string.IsNullOrEmpty(wornWeaponId) ? null : DatabaseRegistry.GetWeapon(wornWeaponId);
             bool ranged = weapon != null && weapon.isRanged;
             var dice = weapon != null ? weapon.damage : new DiceRoll(1, 3, 0); // bare hands: d3
-            int strengthBonus = weapon == null || weapon.addsStrengthModifier ? OsrRules.Modifier(actorDef.strength) : 0;
+            int weaponAttack = weapon != null ? weapon.attackModifier : 0;
 
             var corrosion = PartyState.GetCorrosion(actorDef.id);
 
@@ -1397,16 +1399,16 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 vitality = actorDef.vitality,
                 mind = actorDef.mind,
                 charm = actorDef.charm,
-                baseArmorClass = OsrRules.ArmorClass(armorBonus),
+                baseArmorClass = OsrRules.Defense(armorBonus, actorDef.dexterity, evades),
                 armorBonus = armorBonus,
                 armorCorrosion = Mathf.Min(corrosion.armor, armorBonus),
-                attackBonus = OsrRules.Modifier(ranged ? actorDef.dexterity : actorDef.strength),
-                attackDamage = new DiceRoll(dice.count, dice.sides, dice.bonus + strengthBonus),
+                attackBonus = (ranged ? actorDef.dexterity : actorDef.strength) + weaponAttack,
+                attackDamage = dice,
                 weaponIsMetal = weapon != null && weapon.isMetal,
                 weaponCorrosion = corrosion.weapon,
                 saveVitality = actorDef.vitality,
                 saveMind = actorDef.mind,
-                initiative = actorDef.dexterity,
+                initiative = OsrRules.Modifier(actorDef.dexterity),
                 usesAp = actorDef.usesAp,
                 currentAp = actorDef.usesAp ? 1 : 0,
                 moveRange = actorDef.moveRange,
@@ -1431,7 +1433,8 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 saveVitality = enemyDef.saveBonus,
                 saveMind = enemyDef.saveBonus,
                 morale = enemyDef.morale,
-                initiative = enemyDef.initiative,
+                dexterity = enemyDef.dexterity,
+                initiative = OsrRules.Modifier(enemyDef.dexterity),
                 corrodesArmor = enemyDef.corrodesArmor,
                 corrodesWeapons = enemyDef.corrodesWeapons,
                 immuneToCharm = enemyDef.immuneToCharm,

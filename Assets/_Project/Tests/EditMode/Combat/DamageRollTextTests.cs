@@ -8,14 +8,14 @@ namespace Game.Combat.Tests.EditMode
     public class DamageRollTextTests
     {
         [Test]
-        public void Hit_ShowsTheRollBonusTotalArmorClassAndDamage()
+        public void Hit_ShowsTheRollAtkDefTotalAndDamage()
         {
             var info = new DamageRollInfo
             {
-                attackRoll = 9, attackBonus = 10, targetArmorClass = 13, hit = true, damageText = "d8+2", damage = 7
+                attackRoll = 9, attackBonus = 10, targetArmorClass = 8, hit = true, damageText = "d6", damage = 4
             };
 
-            Assert.AreEqual("Attack  d12 9 + 10 = 19 vs AC 13 — HIT  d8+2 = 7 dmg", DamageRollBar.Describe(info));
+            Assert.AreEqual("Attack  d10 9 + ATK 10 − DEF 8 = 11 vs 6 — HIT  d6 = 4 dmg", DamageRollBar.Describe(info));
         }
 
         [Test]
@@ -32,20 +32,20 @@ namespace Game.Combat.Tests.EditMode
         [Test]
         public void PlainMiss_ShowsTheShortfall()
         {
-            var info = new DamageRollInfo { attackRoll = 4, attackBonus = 5, targetArmorClass = 14, hit = false };
+            var info = new DamageRollInfo { attackRoll = 4, attackBonus = 5, targetArmorClass = 9, hit = false };
 
-            Assert.AreEqual("Attack  d12 4 + 5 = 9 vs AC 14 — MISS", DamageRollBar.Describe(info));
+            Assert.AreEqual("Attack  d10 4 + ATK 5 − DEF 9 = 0 vs 6 — MISS", DamageRollBar.Describe(info));
         }
 
         [Test]
-        public void NaturalTwelve_IsFlagged()
+        public void NaturalTen_IsFlagged()
         {
             var info = new DamageRollInfo
             {
-                attackRoll = 12, attackBonus = 0, targetArmorClass = 20, hit = true, naturalTwelve = true, damageText = "d6", damage = 3
+                attackRoll = 10, attackBonus = 2, targetArmorClass = 12, hit = true, naturalTen = true, damageText = "d6", damage = 3
             };
 
-            StringAssert.Contains("natural 12!", DamageRollBar.Describe(info));
+            StringAssert.Contains("natural 10!", DamageRollBar.Describe(info));
         }
 
         [Test]
@@ -53,7 +53,7 @@ namespace Game.Combat.Tests.EditMode
         {
             var info = new DamageRollInfo
             {
-                attackRoll = 8, attackBonus = 10, targetArmorClass = 7, hit = true, damageText = "d8+2", corrosionPenalty = 2, damage = 3
+                attackRoll = 8, attackBonus = 10, targetArmorClass = 7, hit = true, damageText = "d6", corrosionPenalty = 2, damage = 3
             };
 
             StringAssert.Contains("(−2 corroded)", DamageRollBar.Describe(info));
@@ -70,21 +70,21 @@ namespace Game.Combat.Tests.EditMode
         [Test]
         public void WebSave_ShowsFailedOrResisted()
         {
-            var failed = new DamageRollInfo { spellName = "Web", hit = true, hasSave = true, saveRoll = 3, saveBonus = 7, savePassed = false };
-            var resisted = new DamageRollInfo { spellName = "Web", hit = true, hasSave = true, saveRoll = 6, saveBonus = 7, savePassed = true, effectNegated = true };
+            var failed = new DamageRollInfo { spellName = "Web", hit = true, hasSave = true, saveRoll = 6, saveBonus = 7, saveDifficulty = 8, savePassed = false };
+            var resisted = new DamageRollInfo { spellName = "Web", hit = true, hasSave = true, saveRoll = 7, saveBonus = 7, saveDifficulty = 8, savePassed = true, effectNegated = true };
 
-            Assert.AreEqual("Web  save d12 3 + 7 = 10 vs 12 — FAILED", DamageRollBar.Describe(failed));
-            Assert.AreEqual("Web  save d12 6 + 7 = 13 vs 12 — RESISTED", DamageRollBar.Describe(resisted));
+            Assert.AreEqual("Web  save d10 6 + 7 − DV 8 = 5 vs 6 — FAILED", DamageRollBar.Describe(failed));
+            Assert.AreEqual("Web  save d10 7 + 7 − DV 8 = 6 vs 6 — RESISTED", DamageRollBar.Describe(resisted));
         }
 
         [Test]
         public void FireballSave_ShowsFullOrHalfDamage()
         {
-            var failed = new DamageRollInfo { spellName = "Fireball", hit = true, hasSave = true, damageText = "2d6", saveRoll = 3, saveBonus = 8, savePassed = false, damage = 9 };
-            var saved = new DamageRollInfo { spellName = "Fireball", hit = true, hasSave = true, damageText = "2d6", saveRoll = 4, saveBonus = 8, savePassed = true, halved = true, damage = 4 };
+            var failed = new DamageRollInfo { spellName = "Fireball", hit = true, hasSave = true, damageText = "2d6", saveRoll = 4, saveBonus = 8, saveDifficulty = 7, savePassed = false, damage = 9 };
+            var saved = new DamageRollInfo { spellName = "Fireball", hit = true, hasSave = true, damageText = "2d6", saveRoll = 5, saveBonus = 8, saveDifficulty = 7, savePassed = true, halved = true, damage = 4 };
 
-            Assert.AreEqual("Fireball  save d12 3 + 8 = 11 vs 12 — FAILED  2d6: 9 dmg", DamageRollBar.Describe(failed));
-            Assert.AreEqual("Fireball  save d12 4 + 8 = 12 vs 12 — SAVED, half  4 dmg", DamageRollBar.Describe(saved));
+            Assert.AreEqual("Fireball  save d10 4 + 8 − DV 7 = 5 vs 6 — FAILED  2d6: 9 dmg", DamageRollBar.Describe(failed));
+            Assert.AreEqual("Fireball  save d10 5 + 8 − DV 7 = 6 vs 6 — SAVED, half  4 dmg", DamageRollBar.Describe(saved));
         }
     }
 }

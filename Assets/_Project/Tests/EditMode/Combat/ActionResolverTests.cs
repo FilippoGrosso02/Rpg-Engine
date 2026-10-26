@@ -9,9 +9,9 @@ using UnityEngine;
 namespace Game.Combat.Tests.EditMode
 {
     /// <summary>
-    /// The d12 resolver rolls real dice, so these tests inject a scripted System.Random: every call to Next() returns the next
-    /// queued value. ResolveAttack draws in a fixed order — (1) the d12 attack roll, unless the spell auto-hits or is save-based,
-    /// (2) each damage die, (3) the d12 save roll — so a test can say exactly which roll is which.
+    /// The d10 resolver rolls real dice, so these tests inject a scripted System.Random: every call to Next() returns the next
+    /// queued value. ResolveAttack draws in a fixed order — (1) the d10 attack roll, unless the spell auto-hits or is save-based,
+    /// (2) each damage die, (3) the d10 save roll — so a test can say exactly which roll is which.
     /// </summary>
     public class ActionResolverTests
     {
@@ -41,17 +41,17 @@ namespace Game.Combat.Tests.EditMode
             };
         }
 
-        /// <summary>A Warrior: attack +10, sword d8+2.</summary>
+        /// <summary>A Warrior: ATK 10 (STR 10, shortsword +0), shortsword d6.</summary>
         private static CombatantRuntime MakeWarrior()
         {
             var warrior = MakeCombatant(true);
             warrior.attackBonus = 10;
-            warrior.attackDamage = new DiceRoll(1, 8, 2);
+            warrior.attackDamage = new DiceRoll(1, 6);
             warrior.weaponIsMetal = true;
             return warrior;
         }
 
-        private static CombatantRuntime MakeMonster(int armorClass, int saveBonus = 5)
+        private static CombatantRuntime MakeMonster(int armorClass, int saveBonus = 7)
         {
             var monster = MakeCombatant(false);
             monster.baseArmorClass = armorClass;
@@ -68,7 +68,7 @@ namespace Game.Combat.Tests.EditMode
             return skill;
         }
 
-        private static SkillDefinition MakeSpell(string name, DiceRoll damage, bool autoHit = false, SaveType save = SaveType.None, bool half = false)
+        private static SkillDefinition MakeSpell(string name, DiceRoll damage, bool autoHit = false, SaveType save = SaveType.None, bool half = false, int dv = 7)
         {
             var spell = ScriptableObject.CreateInstance<SkillDefinition>();
             spell.displayName = name;
@@ -76,6 +76,7 @@ namespace Game.Combat.Tests.EditMode
             spell.damage = damage;
             spell.autoHit = autoHit;
             spell.saveType = save;
+            spell.saveDifficulty = dv;
             spell.halfDamageOnSave = half;
             return spell;
         }
@@ -83,32 +84,32 @@ namespace Game.Combat.Tests.EditMode
         // ---------------------------------------------------------------- weapon attacks
 
         [Test]
-        public void ResolveAttack_RollPlusBonusReachingArmorClassHits_AndRollsWeaponDamagePlusModifier()
+        public void ResolveAttack_RollPlusAtkMinusDefReachingSix_Hits_AndDealsTheWeaponDieOnly()
         {
             var skill = MakeBasicAttack();
-            var rolls = new ScriptedRolls(5, 6); // d12 attack = 5 (+10 = 15 vs AC 9), then d8 = 6
+            var rolls = new ScriptedRolls(5, 6); // d10 attack = 5 (+10 ATK - 9 DEF = 6, just enough), then d6 = 6
 
             var info = ActionResolver.ResolveAttack(MakeWarrior(), MakeMonster(armorClass: 9), skill, rolls);
 
             Assert.IsTrue(info.hit);
             Assert.AreEqual(5, info.attackRoll);
             Assert.AreEqual(9, info.targetArmorClass);
-            Assert.AreEqual(8, info.damage); // d8 (6) + 2
-            Assert.AreEqual("d8+2", info.damageText);
+            Assert.AreEqual(6, info.damage); // d6 only, no ability bonus
+            Assert.AreEqual("d6", info.damageText);
             Assert.AreEqual(0, rolls.Remaining);
 
             Object.DestroyImmediate(skill);
         }
 
         [Test]
-        public void ResolveAttack_RollPlusBonusBelowArmorClassMisses_AndDealsNothing()
+        public void ResolveAttack_RollPlusAtkMinusDefBelowSix_Misses_AndDealsNothing()
         {
             var skill = MakeBasicAttack();
             var attacker = MakeWarrior();
             attacker.attackBonus = 5;
-            var rolls = new ScriptedRolls(8); // 8 + 5 = 13 < AC 14: a miss, so no damage die is rolled
+            var rolls = new ScriptedRolls(8); // 8 + 5 - 9 = 4 < 6: a miss, so no damage die is rolled
 
-            var info = ActionResolver.ResolveAttack(attacker, MakeMonster(armorClass: 14), skill, rolls);
+            var info = ActionResolver.ResolveAttack(attacker, MakeMonster(armorClass: 9), skill, rolls);
 
             Assert.IsFalse(info.hit);
             Assert.AreEqual(0, info.damage);
@@ -118,11 +119,11 @@ namespace Game.Combat.Tests.EditMode
         }
 
         [Test]
-        public void ResolveAttack_NaturalOneMissesEvenWhenTheBonusBeatsArmorClass()
+        public void ResolveAttack_NaturalOneMissesEvenWhenTheGapIsHuge()
         {
             var skill = MakeBasicAttack();
 
-            var info = ActionResolver.ResolveAttack(MakeWarrior(), MakeMonster(armorClass: 5), skill, new ScriptedRolls(1));
+            var info = ActionResolver.ResolveAttack(MakeWarrior(), MakeMonster(armorClass: 2), skill, new ScriptedRolls(1));
 
             Assert.IsFalse(info.hit);
             Assert.IsTrue(info.naturalOne);
@@ -131,35 +132,35 @@ namespace Game.Combat.Tests.EditMode
         }
 
         [Test]
-        public void ResolveAttack_NaturalTwelveHitsEvenWhenTheBonusCannotReachArmorClass()
+        public void ResolveAttack_NaturalTenHitsEvenWhenTheGapIsFarBelowFive()
         {
             var skill = MakeBasicAttack();
             var attacker = MakeWarrior();
-            attacker.attackBonus = 0;
+            attacker.attackBonus = 2;
 
-            var info = ActionResolver.ResolveAttack(attacker, MakeMonster(armorClass: 25), skill, new ScriptedRolls(12, 3));
+            var info = ActionResolver.ResolveAttack(attacker, MakeMonster(armorClass: 12), skill, new ScriptedRolls(10, 3));
 
             Assert.IsTrue(info.hit);
-            Assert.IsTrue(info.naturalTwelve);
-            Assert.AreEqual(5, info.damage); // d8 (3) + 2
+            Assert.IsTrue(info.naturalTen);
+            Assert.AreEqual(3, info.damage); // d6
 
             Object.DestroyImmediate(skill);
         }
 
         [Test]
-        public void ResolveAttack_GuardAddsTwoToArmorClass()
+        public void ResolveAttack_GuardAddsTwoToDefense()
         {
             var skill = MakeBasicAttack();
             var attacker = MakeWarrior();
             attacker.attackBonus = 5;
-            var target = MakeMonster(armorClass: 12);
+            var target = MakeMonster(armorClass: 7);
 
-            // 7 + 5 = 12 beats AC 12 ...
-            Assert.IsTrue(ActionResolver.ResolveAttack(attacker, target, skill, new ScriptedRolls(7, 1)).hit);
+            // 8 + 5 - 7 = 6 hits ...
+            Assert.IsTrue(ActionResolver.ResolveAttack(attacker, target, skill, new ScriptedRolls(8, 1)).hit);
 
-            // ... but not once the target is guarding (AC 14).
+            // ... but not once the target is guarding (DEF 9: 8 + 5 - 9 = 4).
             target.guarding = true;
-            Assert.IsFalse(ActionResolver.ResolveAttack(attacker, target, skill, new ScriptedRolls(7)).hit);
+            Assert.IsFalse(ActionResolver.ResolveAttack(attacker, target, skill, new ScriptedRolls(8)).hit);
 
             Object.DestroyImmediate(skill);
         }
@@ -204,15 +205,16 @@ namespace Game.Combat.Tests.EditMode
         [Test]
         public void ResolveAttack_NegatingSave_FailedSaveKeepsTheEffect_PassedSaveResistsIt()
         {
-            var web = MakeSpell("Web", DiceRoll.None, save: SaveType.Vitality);
+            var web = MakeSpell("Web", DiceRoll.None, save: SaveType.Vitality, dv: 8);
             var target = MakeMonster(armorClass: 9, saveBonus: 7);
 
-            var failed = ActionResolver.ResolveAttack(MakeCombatant(true), target, web, new ScriptedRolls(4)); // 4 + 7 = 11 < 12
+            var failed = ActionResolver.ResolveAttack(MakeCombatant(true), target, web, new ScriptedRolls(6)); // 6 + 7 - DV 8 = 5 < 6
             Assert.IsTrue(failed.hasSave);
             Assert.IsFalse(failed.savePassed);
+            Assert.AreEqual(8, failed.saveDifficulty);
             Assert.IsFalse(failed.effectNegated);
 
-            var passed = ActionResolver.ResolveAttack(MakeCombatant(true), target, web, new ScriptedRolls(5)); // 5 + 7 = 12
+            var passed = ActionResolver.ResolveAttack(MakeCombatant(true), target, web, new ScriptedRolls(7)); // 7 + 7 - 8 = 6
             Assert.IsTrue(passed.savePassed);
             Assert.IsTrue(passed.effectNegated);
 
@@ -225,11 +227,11 @@ namespace Game.Combat.Tests.EditMode
             var fireball = MakeSpell("Fireball", new DiceRoll(2, 6), save: SaveType.Vitality, half: true);
             var target = MakeMonster(armorClass: 9, saveBonus: 8);
 
-            var failed = ActionResolver.ResolveAttack(MakeCombatant(true), target, fireball, new ScriptedRolls(4, 5, 3)); // 2d6 = 9, save 3 + 8 = 11
+            var failed = ActionResolver.ResolveAttack(MakeCombatant(true), target, fireball, new ScriptedRolls(4, 5, 4)); // 2d6 = 9, save 4 + 8 - DV 7 = 5
             Assert.AreEqual(9, failed.damage);
             Assert.IsFalse(failed.halved);
 
-            var saved = ActionResolver.ResolveAttack(MakeCombatant(true), target, fireball, new ScriptedRolls(4, 5, 4)); // save 4 + 8 = 12
+            var saved = ActionResolver.ResolveAttack(MakeCombatant(true), target, fireball, new ScriptedRolls(4, 5, 5)); // save 5 + 8 - 7 = 6
             Assert.AreEqual(4, saved.damage); // 9 / 2, rounded down
             Assert.IsTrue(saved.halved);
             Assert.IsFalse(saved.effectNegated);
@@ -245,13 +247,13 @@ namespace Game.Combat.Tests.EditMode
             var slime = MakeMonster(armorClass: 7);
             slime.corrodesArmor = true;
             var hero = MakeCombatant(true);
-            hero.baseArmorClass = 14;
+            hero.baseArmorClass = 7;
             hero.armorBonus = 2;
             var hit = new DamageRollInfo { attacker = slime, target = hero, hit = true };
 
             ActionResolver.ApplyAcidEffects(hit);
             Assert.AreEqual(1, hero.armorCorrosion);
-            Assert.AreEqual(13, hero.ArmorClass);
+            Assert.AreEqual(6, hero.ArmorClass);
 
             ActionResolver.ApplyAcidEffects(hit);
             ActionResolver.ApplyAcidEffects(hit);
@@ -264,7 +266,7 @@ namespace Game.Combat.Tests.EditMode
             var slime = MakeMonster(armorClass: 7);
             slime.corrodesArmor = true;
             var wizard = MakeCombatant(true);
-            wizard.baseArmorClass = 6;
+            wizard.baseArmorClass = 2;
 
             ActionResolver.ApplyAcidEffects(new DamageRollInfo { attacker = slime, target = wizard, hit = true });
             Assert.AreEqual(0, wizard.armorCorrosion);
@@ -307,14 +309,14 @@ namespace Game.Combat.Tests.EditMode
         // ---------------------------------------------------------------- guard and spell points
 
         [Test]
-        public void ApplyGuard_GivesTwoArmorClass_AndOnlyCastersBankTheExtraAp()
+        public void ApplyGuard_GivesTwoDefense_AndOnlyCastersBankTheExtraAp()
         {
             var fighter = MakeCombatant(true);
-            fighter.baseArmorClass = 14;
+            fighter.baseArmorClass = 7;
             ActionResolver.ApplyGuard(fighter);
             Assert.IsTrue(fighter.guarding);
             Assert.IsFalse(fighter.pendingGuardApBonus);
-            Assert.AreEqual(16, fighter.ArmorClass);
+            Assert.AreEqual(9, fighter.ArmorClass);
 
             var wizard = MakeCombatant(true);
             wizard.usesAp = true;
@@ -326,13 +328,13 @@ namespace Game.Combat.Tests.EditMode
         public void BeginTurn_EndsGuard()
         {
             var fighter = MakeCombatant(true);
-            fighter.baseArmorClass = 14;
+            fighter.baseArmorClass = 7;
             ActionResolver.ApplyGuard(fighter);
 
             ActionResolver.BeginTurn(fighter);
 
             Assert.IsFalse(fighter.guarding);
-            Assert.AreEqual(14, fighter.ArmorClass);
+            Assert.AreEqual(7, fighter.ArmorClass);
         }
 
         [Test]
@@ -378,12 +380,12 @@ namespace Game.Combat.Tests.EditMode
         }
 
         [Test]
-        public void RollInitiative_IsAD12PlusTheInitiativeBonus()
+        public void RollInitiative_IsAD10PlusTheDexterityMinorModifier()
         {
             var ranger = MakeCombatant(true);
-            ranger.initiative = 10;
+            ranger.initiative = 2;
 
-            Assert.AreEqual(15, ActionResolver.RollInitiative(ranger, new ScriptedRolls(5)));
+            Assert.AreEqual(7, ActionResolver.RollInitiative(ranger, new ScriptedRolls(5)));
         }
 
         // ---------------------------------------------------------------- targeting and areas

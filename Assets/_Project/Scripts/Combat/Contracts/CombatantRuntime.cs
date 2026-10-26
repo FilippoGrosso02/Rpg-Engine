@@ -20,7 +20,7 @@ namespace Game.Combat.Contracts
         public int maxHp;
         public int currentHp;
 
-        // --- Ability scores (heroes only; monsters have a flat stat block and leave these at 0) ---
+        // --- Ability scores (heroes; a monster only fills in DEX, which breaks initiative ties) ---
         public int strength;
         public int dexterity;
         public int vitality;
@@ -28,26 +28,26 @@ namespace Game.Combat.Contracts
         public int charm;
 
         // --- Defence ---
-        /// <summary>6 + armor + DEX modifier for a hero; the stat block's AC for a monster.</summary>
+        /// <summary>DEF before acid and Guard: 2 + armor + shield (+ DEX minor modifier for an evade class) for a hero; the stat block's DEF for a monster.</summary>
         public int baseArmorClass;
 
-        /// <summary>The AC worn as armor (heroes). Acid can corrode this, but never below 0.</summary>
+        /// <summary>The DEF worn as armor and shield (heroes). Acid can corrode this, but never below 0.</summary>
         public int armorBonus;
 
-        /// <summary>AC lost to acid so far (persisted between fights until repaired).</summary>
+        /// <summary>DEF lost to acid so far (persisted between fights until repaired).</summary>
         public int armorCorrosion;
 
-        /// <summary>Guarding: +2 AC until this combatant's next turn.</summary>
+        /// <summary>Guarding: +2 DEF until this combatant's next turn.</summary>
         public bool guarding;
 
-        /// <summary>Armor class right now (base, minus corrosion, plus Guard). Status modifiers are added by ActionResolver.</summary>
-        public int ArmorClass => Mathf.Max(0, baseArmorClass - armorCorrosion + (guarding ? OsrRules.GuardArmorClassBonus : 0));
+        /// <summary>DEF right now (base, minus corrosion, plus Guard, never below 2). Status modifiers are added by ActionResolver.</summary>
+        public int ArmorClass => Mathf.Max(OsrRules.MinDefense, baseArmorClass - armorCorrosion + (guarding ? OsrRules.GuardDefenseBonus : 0));
 
         // --- Offence ---
-        /// <summary>Added to the d12 attack roll (the STR or DEX score for a hero, the stat block's attack for a monster).</summary>
+        /// <summary>ATK: the STR or DEX score plus the weapon's ATK modifier for a hero, the stat block's ATK for a monster.</summary>
         public int attackBonus;
 
-        /// <summary>Basic Attack damage, including the STR modifier where it applies (sword d8 + 2, ogre 2d6).</summary>
+        /// <summary>Basic Attack damage: the weapon die only, no ability bonus (shortsword d6, ogre 2d6).</summary>
         public DiceRoll attackDamage;
 
         public bool weaponIsMetal;
@@ -56,16 +56,16 @@ namespace Game.Combat.Contracts
         public int weaponCorrosion;
 
         // --- Saves, morale and monster traits ---
-        /// <summary>d12 + this >= 12 saves against physical effects. A hero's VIT score; a monster's flat save.</summary>
+        /// <summary>Rolled with d10 against a DV for physical saves. A hero's VIT score; a monster's flat save stat.</summary>
         public int saveVitality;
 
-        /// <summary>d12 + this >= 12 saves against mental effects. A hero's MIND score; a monster's flat save.</summary>
+        /// <summary>Rolled with d10 against a DV for mental saves. A hero's MIND score; a monster's flat save stat.</summary>
         public int saveMind;
 
         /// <summary>2d6 target number: the monster flees when a 2d6 roll is higher. 0 = never checks.</summary>
         public int morale;
 
-        /// <summary>Added to the d12 initiative roll each round (a hero's DEX score).</summary>
+        /// <summary>Added to the d10 initiative roll, which is made once at the start of the fight (the DEX minor modifier).</summary>
         public int initiative;
 
         public bool corrodesArmor;
@@ -91,7 +91,7 @@ namespace Game.Combat.Contracts
         /// <summary>Set by Guard; consumed at this combatant's next turn start for the caster's "+1 more AP if guarding".</summary>
         public bool pendingGuardApBonus;
 
-        /// <summary>Own turns started so far. A caster's AP is 1 at the start of a fight and grows by 1 from its second turn on.</summary>
+        /// <summary>Own turns started so far. A caster's AP is 1 at the start of a fight and grows by 1 every turn after the first.</summary>
         public int turnsTaken;
 
         /// <summary>How far (in world units) this combatant can move on its own turn.</summary>

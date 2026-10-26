@@ -32,6 +32,7 @@ MonoBehaviour:
     bonus: 0
   autoHit: 1
   saveType: 0
+  saveDifficulty: 7
   halfDamageOnSave: 0
   statusEffectId: 
   statusEffectChance: 1

@@ -79,19 +79,13 @@ namespace Game.Combat.UI.UGUI
         }
 
         /// <summary>
-        /// The score shown on the card's left: DEX for a ranged attacker, STR for a melee one. Monsters have a flat stat block with no ability
-        /// scores, so they show their attack bonus instead.
+        /// The number shown on the card's left: the combatant's ATK (ability score plus weapon modifier for a hero, the stat block's ATK
+        /// for a monster). The icon says which stat it comes from: boot for a ranged attacker (DEX), sword for a melee one.
         /// </summary>
         public static int OffenceStat(CombatantRuntime combatant, out bool dexterity)
         {
             dexterity = combatant.attackRangeMultiplier > 1;
-            int score = dexterity ? combatant.dexterity : combatant.strength;
-            if (score == 0 && combatant.strength == 0 && combatant.dexterity == 0)
-            {
-                return combatant.attackBonus;
-            }
-
-            return score;
+            return combatant.attackBonus;
         }
 
         /// <summary>The card rests slightly desaturated and lights up while the reticle is on it.</summary>

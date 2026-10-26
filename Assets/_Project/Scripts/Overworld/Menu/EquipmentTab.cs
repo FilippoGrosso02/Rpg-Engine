@@ -207,7 +207,7 @@ namespace Game.Overworld.Menu
             var sheet = HeroSheet.Build(CurrentHero());
             MenuText.SetBlock(_stats, sheet == null
                 ? ""
-                : "AC " + sheet.armorClass + "\nATTACK " + MenuText.Signed(sheet.attackBonus) + "\nDAMAGE " + sheet.damageText.ToUpperInvariant());
+                : "DEF " + sheet.armorClass + "\nATK " + sheet.attackBonus + "\nDAMAGE " + sheet.damageText.ToUpperInvariant());
         }
 
         void EquipChoice()

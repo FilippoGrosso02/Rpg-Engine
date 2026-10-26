@@ -64,15 +64,15 @@ namespace Game.Overworld.Menu.Tests.EditMode
         public void HeroSheet_MatchesTheAllyCombatBuilds()
         {
             DatabaseRegistry.Initialize();
-            foreach (var id in new[] { "actor_warrior", "actor_ranger", "actor_wizard" })
+            foreach (var id in new[] { "actor_warrior", "actor_ranger", "actor_thief" })
             {
                 var actor = DatabaseRegistry.GetActor(id);
                 var sheet = HeroSheet.Build(actor);
                 var combatant = EncounterRunner.BuildAllyRuntime(actor);
 
                 Assert.AreEqual(combatant.maxHp, sheet.maxHp, id + " HP");
-                Assert.AreEqual(combatant.ArmorClass, sheet.armorClass, id + " AC");
-                Assert.AreEqual(combatant.attackBonus, sheet.attackBonus, id + " attack");
+                Assert.AreEqual(combatant.ArmorClass, sheet.armorClass, id + " DEF");
+                Assert.AreEqual(combatant.attackBonus, sheet.attackBonus, id + " ATK");
                 Assert.AreEqual(combatant.attackDamage.ToString(), sheet.damageText, id + " damage");
             }
         }
@@ -89,7 +89,7 @@ namespace Game.Overworld.Menu.Tests.EditMode
             Loadout.EquipArmor(warrior, "armor_leather");
             var after = HeroSheet.Build(warrior);
 
-            Assert.AreEqual(before.armorClass - 3, after.armorClass, "leather +4 replaces chain mail +7");
+            Assert.AreEqual(before.armorClass - 2, after.armorClass, "leather +2 replaces chain mail +4");
             Assert.AreNotEqual(before.damageText, after.damageText);
             Assert.AreEqual(after.damageText, EncounterRunner.BuildAllyRuntime(warrior).attackDamage.ToString(), "combat sees the same weapon");
         }
@@ -110,11 +110,11 @@ namespace Game.Overworld.Menu.Tests.EditMode
         [Test]
         public void HeroPages_AreDrawable()
         {
-            foreach (var id in new[] { "actor_warrior", "actor_ranger", "actor_wizard" })
+            foreach (var id in new[] { "actor_warrior", "actor_ranger", "actor_thief" })
             {
                 var text = MenuText.Describe(HeroSheet.Build(DatabaseRegistry.GetActor(id)));
                 AssertDrawable(text, id);
-                Assert.IsTrue(text.Contains("AC "));
+                Assert.IsTrue(text.Contains("DEF "));
             }
         }
     }

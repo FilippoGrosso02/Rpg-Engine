@@ -10,11 +10,12 @@ using UnityEngine;
 namespace Game.Combat.TrailsBattle3D.Runtime
 {
     /// <summary>
-    /// Resolves targeting and the d12 OSR combat rules.
+    /// Resolves targeting and the d10 OSR combat rules.
     ///
-    /// Attack: d12 + attack bonus >= target AC (a natural 1 always misses, a natural 12 always hits), then the weapon's or
-    /// stat block's damage dice. Spells: Magic Missile auto-hits; others may allow a save (d12 + VIT/MIND score >= 12)
-    /// that negates the effect (Web) or halves the damage (Fireball). Slime acid corrodes armor and metal weapons.
+    /// Attack: d10 + ATK - DEF >= 6 (a natural 1 always misses, a natural 10 always hits), then the weapon's or stat block's
+    /// damage dice (no ability bonus, at least 1). Spells: Magic Missile auto-hits; others may allow a save (d10 + VIT/MIND
+    /// against the spell's DV, same rule) that negates the effect (Web) or halves the damage (Fireball). Slime acid corrodes
+    /// armor and metal weapons.
     /// Each method takes an optional seeded <see cref="System.Random"/> so tests can assert exact outcomes.
     /// </summary>
     public static class ActionResolver
@@ -116,13 +117,13 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
         // ------------------------------------------------------------------ rules
 
-        /// <summary>Armor class including status modifiers (never below 0).</summary>
+        /// <summary>DEF including status modifiers (never below the minimum of 2).</summary>
         public static int GetArmorClass(CombatantRuntime target)
         {
-            return Mathf.Max(0, target.ArmorClass + StatusEffectRuntime.GetArmorClassModifier(target));
+            return Mathf.Max(OsrRules.MinDefense, target.ArmorClass + StatusEffectRuntime.GetArmorClassModifier(target));
         }
 
-        /// <summary>d12 attack bonus including status modifiers.</summary>
+        /// <summary>ATK including status modifiers.</summary>
         public static int GetAttackBonus(CombatantRuntime attacker)
         {
             return attacker.attackBonus + StatusEffectRuntime.GetAttackModifier(attacker);
@@ -175,7 +176,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 info.attackBonus = GetAttackBonus(attacker);
                 info.attackRoll = rng.Next(1, OsrRules.DieSides + 1);
                 info.naturalOne = info.attackRoll == 1;
-                info.naturalTwelve = info.attackRoll == OsrRules.DieSides;
+                info.naturalTen = info.attackRoll == OsrRules.DieSides;
                 info.hit = OsrRules.AttackHits(info.attackRoll, info.attackBonus, info.targetArmorClass);
             }
 
@@ -208,8 +209,9 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             {
                 info.hasSave = true;
                 info.saveBonus = GetSaveBonus(target, skill.saveType);
+                info.saveDifficulty = skill.saveDifficulty;
                 info.saveRoll = rng.Next(1, OsrRules.DieSides + 1);
-                info.savePassed = OsrRules.SavePasses(info.saveRoll, info.saveBonus);
+                info.savePassed = OsrRules.TestPasses(info.saveRoll, info.saveBonus, info.saveDifficulty);
 
                 if (info.savePassed)
                 {
@@ -232,8 +234,8 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
         /// <summary>
         /// The chance (0-100) that <paramref name="skill"/> works against <paramref name="target"/>, for the hit-chance badge. It uses
-        /// exactly the dice rules ResolveAttack rolls: a weapon attack is the share of d12 rolls that reach AC (so a natural 1 always
-        /// costs 1/12), an auto-hit is 100, and a save-based spell is the share of d12 rolls the target FAILS its save on.
+        /// exactly the dice rules ResolveAttack rolls: a weapon attack is the share of d10 rolls that hit (clamped to 10-90%), an
+        /// auto-hit is 100, and a save-based spell is the share of d10 rolls the target FAILS its save on.
         /// </summary>
         public static int GetHitChancePercent(CombatantRuntime attacker, CombatantRuntime target, SkillDefinition skill)
         {
@@ -249,7 +251,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 }
                 else if (isSpell && skill.saveType != SaveType.None)
                 {
-                    works = !OsrRules.SavePasses(roll, GetSaveBonus(target, skill.saveType));
+                    works = !OsrRules.TestPasses(roll, GetSaveBonus(target, skill.saveType), skill.saveDifficulty);
                 }
                 else
                 {
@@ -287,7 +289,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             }
         }
 
-        /// <summary>Guard: +2 AC until the next turn, and a caster earns 1 extra AP at that next turn.</summary>
+        /// <summary>Guard: +2 DEF until the next turn, and a caster earns 1 extra AP at that next turn.</summary>
         public static void ApplyGuard(CombatantRuntime combatant)
         {
             combatant.guarding = true;
@@ -295,7 +297,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         }
 
         /// <summary>
-        /// Start-of-turn bookkeeping: Guard ends, and a caster gains AP — 1 at the start of the fight, +1 from its second turn on,
+        /// Start-of-turn bookkeeping: Guard ends, and a caster gains AP — 1 at the start of the fight, +1 every turn after its first,
         /// and +1 more if it guarded last turn.
         /// </summary>
         public static void BeginTurn(CombatantRuntime combatant)
@@ -312,7 +314,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             combatant.turnsTaken++;
         }
 
-        /// <summary>d12 + initiative, rolled for each combatant every round.</summary>
+        /// <summary>d10 + the DEX minor modifier, rolled once per combatant at the start of the fight.</summary>
         public static int RollInitiative(CombatantRuntime combatant, System.Random rng)
         {
             return rng.Next(1, OsrRules.DieSides + 1) + combatant.initiative;

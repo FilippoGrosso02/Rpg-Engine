@@ -12,10 +12,10 @@ namespace Game.Data.Definitions
 
         public int tickDamage; // 0 = no DoT
 
-        /// <summary>Added to the d12 attack roll (negative = worse).</summary>
+        /// <summary>Added to ATK (negative = worse).</summary>
         public int attackModifier;
 
-        /// <summary>Added to armor class (negative = worse).</summary>
+        /// <summary>Added to DEF (negative = worse).</summary>
         public int armorClassModifier;
 
         /// <summary>Stuck in a web: cannot move (it can still act where it stands).</summary>
