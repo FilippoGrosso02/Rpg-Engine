@@ -4,6 +4,7 @@
     "references": [
         "Game.Data",
         "Game.Common",
+        "Game.Audio",
         "Game.Combat.Contracts",
         "Game.Services",
         "Unity.Cinemachine"

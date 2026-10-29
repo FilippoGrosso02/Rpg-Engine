@@ -1,3 +1,4 @@
+using Game.Audio;
 using UnityEngine;
 
 namespace Game.Overworld
@@ -11,9 +12,12 @@ namespace Game.Overworld
         public float moveSpeed = 5f;
         public float turnSpeed = 720f;
         public float gravity = -20f;
+        [Tooltip("Seconds between footstep sounds while walking.")]
+        public float footstepInterval = 0.42f;
 
         CharacterController _controller;
         float _verticalVelocity;
+        float _nextFootstep;
 
         void Awake()
         {
@@ -37,6 +41,12 @@ namespace Game.Overworld
             _verticalVelocity = _controller.isGrounded ? -1f : _verticalVelocity + gravity * Time.deltaTime;
             Vector3 velocity = move * moveSpeed + Vector3.up * _verticalVelocity;
             _controller.Move(velocity * Time.deltaTime);
+
+            if (move.sqrMagnitude > 0.0001f && _controller.isGrounded && Time.time >= _nextFootstep)
+            {
+                GameAudio.Play(AudioCue.Footstep, transform.position);
+                _nextFootstep = Time.time + footstepInterval;
+            }
         }
 
         /// <summary>Moves the player instantly (CharacterController ignores direct transform writes while enabled).</summary>

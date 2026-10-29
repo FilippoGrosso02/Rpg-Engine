@@ -3,6 +3,7 @@
     "rootNamespace": "",
     "references": [
         "Game.Overworld",
+        "Game.Data",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

@@ -4,6 +4,7 @@
     "references": [
         "Game.Data",
         "Game.Overworld",
+        "Game.Audio",
         "Game.Combat.UI.UGUI",
         "UnityEngine.UI"
     ],

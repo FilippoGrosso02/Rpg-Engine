@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0af3713ee72b0604887764caf7d7c28f, type: 3}
+  m_Name: enemy_ogre_warlord
+  m_EditorClassIdentifier: Game.Data::Game.Data.Definitions.EnemyDefinition
+  id: enemy_ogre_warlord
+  displayName: Ogre Warlord
+  sprite: {fileID: 0}
+  battleModelPrefab: {fileID: 7695955738425482828, guid: 3818a30cb8297a24f947ec04c8976f34, type: 3}
+  animationSet: {fileID: 11400000, guid: 18cb63096f4bb1b468bd357639bb7112, type: 2}
+  hp: 20
+  armorClass: 6
+  attackBonus: 8
+  damage:
+    count: 1
+    sides: 8
+    bonus: 0
+  morale: 0
+  dexterity: 7
+  saveBonus: 9
+  corrodesArmor: 0
+  corrodesWeapons: 0
+  immuneToCharm: 1
+  immuneToFear: 1
+  immuneToSleep: 0
+  moveRange: 6
+  attackRangeMultiplier: 1
+  roleLabel: Boss
+  skillIds:
+  - skill_basic_attack
+  aiTag: 
+  lootTable: []

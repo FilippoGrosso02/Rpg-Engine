@@ -1,4 +1,5 @@
 using System.Collections;
+using Game.Audio;
 using Game.Combat.Contracts;
 using Game.Data.Definitions;
 using Game.Data.State;
@@ -33,6 +34,8 @@ namespace Game.Overworld
 
         void Awake() => PartyRoster.EnsureInitialized(startingRoster);
 
+        void Start() => GameAudio.SetMusicState(AudioMusicState.Overworld);
+
         void OnEnable() => OverworldEnemy.PlayerContacted += BeginEncounter;
         void OnDisable() => OverworldEnemy.PlayerContacted -= BeginEncounter;
 
@@ -51,6 +54,7 @@ namespace Game.Overworld
             }
 
             InBattle = true;
+            GameAudio.SetMusicState(AudioMusicState.Battle);
             _activeEnemy = enemy;
             overworldRoot.SetActive(false);
             if (encounterStarter != null) encounterStarter(enemy.encounter, OnEncounterComplete);
@@ -59,6 +63,7 @@ namespace Game.Overworld
 
         void OnEncounterComplete(EncounterResult result)
         {
+            GameAudio.SetMusicState(AudioMusicState.Overworld);
             overworldRoot.SetActive(true);
             var enemies = FindObjectsByType<OverworldEnemy>();
 
@@ -67,6 +72,7 @@ namespace Game.Overworld
                 if (_activeEnemy != null)
                 {
                     DefeatedEnemies.Add(_activeEnemy.enemyId);
+                    if (_activeEnemy.endsDemo) DemoEndPanel.Show();
                     Destroy(_activeEnemy.gameObject);
                 }
                 foreach (var e in enemies) if (e != _activeEnemy) e.ForgetPlayer();

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Game.Audio;
 using Game.Combat.UI.UGUI;
 using Game.Data.Definitions;
 using Game.Data.Enums;
@@ -219,14 +220,17 @@ namespace Game.Overworld.Menu
             if (_slots.Index == 0)
             {
                 Loadout.EquipWeapon(hero, id);
+                GameAudio.Play(AudioCue.EquipItem);
             }
             else if (id == null)
             {
                 Loadout.UnequipArmor(hero, ArmorSlots[_slots.Index - 1]);
+                GameAudio.Play(AudioCue.UnequipItem);
             }
             else
             {
                 Loadout.EquipArmor(hero, id);
+                GameAudio.Play(AudioCue.EquipItem);
             }
 
             // The gear lists changed under the cursor: redraw everything and drop back to the slot list.

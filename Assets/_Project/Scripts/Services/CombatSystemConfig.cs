@@ -1,4 +1,5 @@
 using System;
+using Game.Audio;
 using Game.Combat.Contracts;
 using Game.Combat.UI.UGUI;
 using UnityEngine;
@@ -61,6 +62,8 @@ namespace Game.Services
             }
 
             _activeRunnerInstance = runnerInstance;
+
+            CombatAudioBridge.Attach(runnerInstance.GetComponent<ICombatEvents>());
 
             var hudInstance = BindHudIfConfigured(runnerInstance, runner);
 

@@ -1,0 +1,16 @@
+{
+    "name": "Game.Audio",
+    "rootNamespace": "",
+    "references": [
+        "Game.Combat.Contracts"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

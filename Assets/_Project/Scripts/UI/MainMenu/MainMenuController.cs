@@ -1,3 +1,4 @@
+using Game.Audio;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -42,6 +43,7 @@ public class MainMenuController : MonoBehaviour
 
         LoadSettings();
         ShowSettings(false);
+        GameAudio.SetMusicState(AudioMusicState.Menu);
     }
 
     void Update()
@@ -83,6 +85,7 @@ public class MainMenuController : MonoBehaviour
         qualityDropdown.SetValueWithoutNotify(quality);
 
         AudioListener.volume = vol;
+        GameAudio.SetBusVolume(AudioBus.Master, vol);
         QualitySettings.SetQualityLevel(quality);
         Screen.fullScreen = full;
     }
@@ -90,6 +93,7 @@ public class MainMenuController : MonoBehaviour
     void SetVolume(float v)
     {
         AudioListener.volume = v;
+        GameAudio.SetBusVolume(AudioBus.Master, v);
         PlayerPrefs.SetFloat(MasterVolumeKey, v);
     }
 

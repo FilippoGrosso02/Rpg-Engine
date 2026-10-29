@@ -2,7 +2,8 @@
     "name": "Game.UI.MainMenu",
     "rootNamespace": "",
     "references": [
-        "UnityEngine.UI"
+        "UnityEngine.UI",
+        "Game.Audio"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Game.Audio;
 using Game.Combat.UI.UGUI;
 using Game.Data.State;
 using UnityEngine;
@@ -21,7 +22,7 @@ namespace Game.Overworld.Menu
         const float TabWidth = 84f;
 
         /// <summary>The stock the party starts with until something else (shops, chests, saves) provides items.</summary>
-        static readonly (string id, int count)[] StartingItems = { ("item_test_potion", 3) };
+        static readonly (string id, int count)[] StartingItems = { ("item_healing_potion", 2) };
         static readonly string[] StartingWeapons = { "weapon_sword", "weapon_dagger", "weapon_shortbow" };
         static readonly string[] StartingArmor = { "armor_leather", "armor_chain_mail", "armor_shield" };
 
@@ -67,16 +68,20 @@ namespace Game.Overworld.Menu
                 return;
             }
 
-            if (Input.GetKeyDown(KeyCode.Q)) SelectTab(_tabIndex - 1);
-            if (Input.GetKeyDown(KeyCode.E)) SelectTab(_tabIndex + 1);
+            if (Input.GetKeyDown(KeyCode.Q)) { GameAudio.Play(AudioCue.UiMove); SelectTab(_tabIndex - 1); }
+            if (Input.GetKeyDown(KeyCode.E)) { GameAudio.Play(AudioCue.UiMove); SelectTab(_tabIndex + 1); }
 
             if (Input.GetKeyDown(KeyCode.Escape))
             {
                 if (!_tabs[_tabIndex].HandleBack()) Close();
+                else GameAudio.Play(AudioCue.UiBack);
                 return;
             }
 
-            _tabs[_tabIndex].Handle(ReadInput());
+            var input = ReadInput();
+            if (input.moveX != 0 || input.moveY != 0) GameAudio.Play(AudioCue.UiMove);
+            if (input.confirm) GameAudio.Play(AudioCue.UiConfirm);
+            _tabs[_tabIndex].Handle(input);
         }
 
         static MenuInput ReadInput()
@@ -101,6 +106,8 @@ namespace Game.Overworld.Menu
             if (IsOpen) return;
 
             IsOpen = true;
+            InteractionSystem.MenuOpen = true;
+            GameAudio.Play(AudioCue.MenuOpen);
             _previousTimeScale = Time.timeScale > 0f ? Time.timeScale : 1f;
             Time.timeScale = 0f;
             Inventory.Changed += RefreshCurrentTab;
@@ -114,6 +121,8 @@ namespace Game.Overworld.Menu
             if (!IsOpen) return;
 
             IsOpen = false;
+            InteractionSystem.MenuOpen = false;
+            GameAudio.Play(AudioCue.MenuClose);
             Time.timeScale = _previousTimeScale;
             Inventory.Changed -= RefreshCurrentTab;
             PartyRoster.Changed -= RefreshCurrentTab;
@@ -212,6 +221,8 @@ namespace Game.Overworld.Menu
 
             if (director.GetComponent<OverworldMenu>() == null) director.gameObject.AddComponent<OverworldMenu>();
             if (director.GetComponent<OverworldHud>() == null) director.gameObject.AddComponent<OverworldHud>();
+            if (director.GetComponent<InteractionSystem>() == null) director.gameObject.AddComponent<InteractionSystem>();
+            if (director.GetComponent<DemoEndPanel>() == null) director.gameObject.AddComponent<DemoEndPanel>();
         }
     }
 }

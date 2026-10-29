@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Game.Audio;
 using Game.Combat.UI.UGUI;
 using Game.Data.Registry;
 using Game.Data.State;
@@ -6,7 +7,7 @@ using UnityEngine;
 
 namespace Game.Overworld.Menu
 {
-    /// <summary>What the party carries. Items cannot be used from the menu yet; this is the list and what each one does.</summary>
+    /// <summary>What the party carries and what each item does. Enter uses a healing item on the most wounded hero.</summary>
     public sealed class ItemsTab : MenuTab
     {
         const int DescriptionChars = 48;
@@ -15,6 +16,7 @@ namespace Game.Overworld.Menu
         PixelText _name;
         PixelText _description;
         PixelText _empty;
+        PixelText _message;
         readonly List<string> _ids = new List<string>();
 
         public override string Title => "ITEMS";
@@ -24,6 +26,7 @@ namespace Game.Overworld.Menu
             _list = new MenuList(root, 0, 0, 150, 12);
             _name = UiFactory.Text(root, "Name", "", 164, 0, 256, 8, PixelText.Align.Left, UiFactory.Gold);
             _description = UiFactory.Text(root, "Description", "", 164, 14, 256, 120, PixelText.Align.Left, UiFactory.Cream);
+            _message = UiFactory.Text(root, "Message", "", 164, 150, 256, 8, PixelText.Align.Left, UiFactory.Gold);
             _empty = UiFactory.Text(root, "Empty", "YOU ARE NOT CARRYING ANYTHING.", 0, 0, 300, 8, PixelText.Align.Left, UiFactory.Cream);
         }
 
@@ -47,8 +50,21 @@ namespace Game.Overworld.Menu
         {
             if (input.moveY != 0 && _list.Move(input.moveY))
             {
+                _message.text = "";
                 ShowSelected();
             }
+
+            if (input.confirm && _ids.Count > 0)
+            {
+                if (PartyCare.UseHealingItem(_ids[_list.Index], out string message)) GameAudio.Play(AudioCue.PotionUse);
+                else GameAudio.Play(AudioCue.UiDenied);
+                _message.text = message.ToUpperInvariant();
+            }
+        }
+
+        public override void Reset()
+        {
+            if (_message != null) _message.text = "";
         }
 
         void ShowSelected()

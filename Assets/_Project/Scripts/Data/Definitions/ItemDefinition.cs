@@ -13,6 +13,9 @@ namespace Game.Data.Definitions
 
         public string effectSkillId; // nullable: e.g. a potion points at a Skill that heals
 
+        [Tooltip("> 0: using this item in the menu heals the most wounded hero by this many HP.")]
+        public int healAmount;
+
         public bool stackable;
         public int maxStack = 1;
     }

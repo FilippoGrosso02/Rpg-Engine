@@ -21,6 +21,8 @@ namespace Game.Overworld
         [Tooltip("Stable unique id within the dungeon; used later to remember defeated enemies.")]
         public string enemyId;
         public EncounterDefinition encounter;
+        [Tooltip("Winning this fight ends the demo (final boss).")]
+        public bool endsDemo;
 
         [Header("Patrol")]
         public Transform[] patrolPoints;
