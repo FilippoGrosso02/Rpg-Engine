@@ -15,13 +15,17 @@ namespace Game.Combat.TrailsBattle3D.Runtime
     {
         private readonly List<CombatantRuntime> _combatants;
         private readonly Random _rng;
+        private readonly EncounterAdvantage _advantage;
         private List<CombatantRuntime> _order;
         private int _index;
+        private Queue<CombatantRuntime> _opening = new Queue<CombatantRuntime>();
 
-        public TurnScheduler(List<CombatantRuntime> combatants, Random rng = null)
+        /// <param name="advantage">The side that caught the other off guard acts once, in its rolled order, before the normal cycle starts.</param>
+        public TurnScheduler(List<CombatantRuntime> combatants, Random rng = null, EncounterAdvantage advantage = EncounterAdvantage.None)
         {
             _combatants = combatants;
             _rng = rng ?? new Random();
+            _advantage = advantage;
         }
 
         /// <summary>Returns the next standing combatant to act, wrapping into the next round when the order runs out.
@@ -29,6 +33,15 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         public CombatantRuntime AdvanceToNextActor()
         {
             EnsureOrder();
+
+            while (_opening.Count > 0)
+            {
+                var opener = _opening.Dequeue();
+                if (!opener.IsDefeated)
+                {
+                    return opener;
+                }
+            }
 
             for (int checkedCount = 0; checkedCount < _order.Count; checkedCount++)
             {
@@ -55,6 +68,14 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 return result;
             }
 
+            foreach (var opener in _opening)
+            {
+                if (result.Count < count && !opener.IsDefeated)
+                {
+                    result.Add(opener);
+                }
+            }
+
             for (int i = 0; result.Count < count; i++)
             {
                 var candidate = _order[(_index + i) % _order.Count];
@@ -76,6 +97,12 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
             _order = RollOrder(_combatants.Where(c => !c.IsDefeated).ToList());
             _index = 0;
+
+            if (_advantage != EncounterAdvantage.None)
+            {
+                bool partyOpens = _advantage == EncounterAdvantage.Party;
+                _opening = new Queue<CombatantRuntime>(_order.Where(c => c.isPlayerSide == partyOpens));
+            }
         }
 
         private List<CombatantRuntime> RollOrder(List<CombatantRuntime> standing)

@@ -16,4 +16,5 @@ MonoBehaviour:
   displayName: Ranger
   hitDieSides: 8
   evadesWithDex: 1
+  overworldAttack: 2
   skillUnlocks: []

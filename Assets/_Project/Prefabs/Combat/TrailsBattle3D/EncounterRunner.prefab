@@ -45,6 +45,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ae4894a7146aebf478248feecbb3a633, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  inPlaceCameraRigPrefab: {fileID: 3557370794289320563, guid: 421e97c6adfbc894c9ee679eefdbf703, type: 3}
   autoPilotAllSides: 0
   <WaitForResultAcknowledgementBeforeUnload>k__BackingField: 0
 --- !u!114 &7007462014355774438
@@ -61,3 +62,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   arenaCamera: {fileID: 0}
   maxRayDistance: 200
+  ignoredView: {fileID: 0}

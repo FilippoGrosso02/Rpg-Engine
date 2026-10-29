@@ -16,4 +16,5 @@ MonoBehaviour:
   displayName: Warrior
   hitDieSides: 8
   evadesWithDex: 0
+  overworldAttack: 0
   skillUnlocks: []

@@ -10,13 +10,14 @@ namespace Game.Overworld.Menu
         MenuList _list;
         PixelText _message;
         bool _confirmingQuit;
+        bool _hasFollowers; // the party follow switch only exists when the party is on the map (fights play out there)
 
         public override string Title => "SYSTEM";
 
         protected override void Build(RectTransform root)
         {
-            _list = new MenuList(root, 0, 0, 150, 3);
-            _message = UiFactory.Text(root, "Message", "", 0, 44, 424, 7, PixelText.Align.Left, UiFactory.Cream);
+            _list = new MenuList(root, 0, 0, 150, 4);
+            _message = UiFactory.Text(root, "Message", "", 0, 55, 424, 7, PixelText.Align.Left, UiFactory.Cream);
         }
 
         public override void Reset()
@@ -27,7 +28,11 @@ namespace Game.Overworld.Menu
 
         public override void Refresh()
         {
-            _list.SetItems(new List<string> { "SAVE GAME", "SETTINGS", "QUIT" }, keepIndex: true);
+            _hasFollowers = Object.FindAnyObjectByType<PartyFollowers>() != null;
+            var items = new List<string>();
+            if (_hasFollowers) items.Add(PartyFollowers.Following ? "PARTY FOLLOW: ON" : "PARTY FOLLOW: OFF");
+            items.AddRange(new[] { "SAVE GAME", "SETTINGS", "QUIT" });
+            _list.SetItems(items, keepIndex: true);
             _list.Focused = !_confirmingQuit;
             _list.Redraw();
         }
@@ -47,8 +52,16 @@ namespace Game.Overworld.Menu
 
             if (!input.confirm) return;
 
-            switch (_list.Index)
+            int choice = _list.Index - (_hasFollowers ? 1 : 0); // -1 is the party follow switch
+            switch (choice)
             {
+                case -1:
+                    PartyFollowers.Following = !PartyFollowers.Following;
+                    MenuText.SetBlock(_message, PartyFollowers.Following
+                        ? "THE PARTY FOLLOWS YOU AGAIN."
+                        : "THE PARTY HOLDS ITS GROUND,\nBUT STAYS WITHIN FIGHTING RANGE.");
+                    Refresh();
+                    break;
                 case 0:
                     MenuText.SetBlock(_message, "SAVING IS NOT AVAILABLE YET.");
                     break;

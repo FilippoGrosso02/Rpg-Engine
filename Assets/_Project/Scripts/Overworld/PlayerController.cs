@@ -1,5 +1,6 @@
 using Game.Audio;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace Game.Overworld
 {
@@ -14,8 +15,15 @@ namespace Game.Overworld
         public float gravity = -20f;
         [Tooltip("Seconds between footstep sounds while walking.")]
         public float footstepInterval = 0.42f;
+        [Tooltip("Ignore movement input (e.g. while the party swaps its leader).")]
+        public bool movementLocked;
 
         CharacterController _controller;
+        Vector3[] _autoCorners;
+        int _autoIndex;
+        float _autoStop;
+        float _autoDeadline;
+        System.Action<bool> _autoDone;
         float _verticalVelocity;
         float _nextFootstep;
 
@@ -29,8 +37,16 @@ namespace Game.Overworld
             var cam = cameraTransform != null ? cameraTransform : (Camera.main != null ? Camera.main.transform : null);
             float yaw = cam != null ? cam.eulerAngles.y : 0f;
 
-            var input = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
-            Vector3 move = GetCameraRelativeMove(input, yaw);
+            Vector3 move;
+            if (_autoCorners != null)
+            {
+                move = AutoWalkMove();
+            }
+            else
+            {
+                var input = movementLocked ? Vector2.zero : new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
+                move = GetCameraRelativeMove(input, yaw);
+            }
 
             if (move.sqrMagnitude > 0.0001f)
             {
@@ -47,6 +63,90 @@ namespace Game.Overworld
                 GameAudio.Play(AudioCue.Footstep, transform.position);
                 _nextFootstep = Time.time + footstepInterval;
             }
+        }
+
+        /// <summary>
+        /// Stops input and takes the player's collider out of the world. Used while a fight plays out on the overworld: the party's
+        /// combatants stand where the player did, and this capsule would otherwise sit in front of every aiming ray.
+        /// </summary>
+        public void SetFrozen(bool frozen)
+        {
+            if (_controller == null) _controller = GetComponent<CharacterController>();
+            if (frozen && _autoCorners != null) FinishAutoWalk(false);
+            enabled = !frozen;
+            _controller.enabled = !frozen;
+            _verticalVelocity = 0f;
+        }
+
+        /// <summary>True while the player is walking itself to a point (<see cref="WalkTo"/>); input is ignored meanwhile.</summary>
+        public bool AutoWalking => _autoCorners != null;
+
+        /// <summary>
+        /// Walks the player along the NavMesh to within <paramref name="stopDistance"/> of <paramref name="destination"/>, ignoring input.
+        /// <paramref name="done"/> gets true on arrival, false when cancelled or timed out. Returns false (and does nothing) if there is no way there.
+        /// </summary>
+        public bool WalkTo(Vector3 destination, float stopDistance, System.Action<bool> done)
+        {
+            var path = new NavMeshPath();
+            if (!NavMesh.SamplePosition(transform.position, out var from, 2f, NavMesh.AllAreas)
+                || !NavMesh.SamplePosition(destination, out var to, 2f, NavMesh.AllAreas)
+                || !NavMesh.CalculatePath(from.position, to.position, NavMesh.AllAreas, path)
+                || path.status != NavMeshPathStatus.PathComplete
+                || path.corners.Length == 0)
+            {
+                return false;
+            }
+
+            _autoCorners = path.corners;
+            _autoIndex = 0;
+            _autoStop = stopDistance;
+            _autoDone = done;
+            _autoDeadline = Time.time + 12f;
+            return true;
+        }
+
+        public void CancelAutoWalk()
+        {
+            if (_autoCorners != null) FinishAutoWalk(false);
+        }
+
+        void FinishAutoWalk(bool arrived)
+        {
+            var callback = _autoDone;
+            _autoCorners = null;
+            _autoDone = null;
+            callback?.Invoke(arrived);
+        }
+
+        /// <summary>The direction to walk this frame along the planned path (zero once it ends).</summary>
+        Vector3 AutoWalkMove()
+        {
+            var position = transform.position;
+            var toEnd = _autoCorners[_autoCorners.Length - 1] - position;
+            toEnd.y = 0f;
+            if (toEnd.magnitude <= _autoStop)
+            {
+                FinishAutoWalk(true);
+                return Vector3.zero;
+            }
+
+            if (Time.time > _autoDeadline)
+            {
+                FinishAutoWalk(false);
+                return Vector3.zero;
+            }
+
+            while (_autoIndex < _autoCorners.Length - 1)
+            {
+                var toCorner = _autoCorners[_autoIndex] - position;
+                toCorner.y = 0f;
+                if (toCorner.magnitude >= 0.3f) break;
+                _autoIndex++;
+            }
+
+            var direction = _autoCorners[_autoIndex] - position;
+            direction.y = 0f;
+            return direction.sqrMagnitude < 0.0001f ? Vector3.zero : direction.normalized;
         }
 
         /// <summary>Moves the player instantly (CharacterController ignores direct transform writes while enabled).</summary>

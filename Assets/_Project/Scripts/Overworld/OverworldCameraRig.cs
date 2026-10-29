@@ -31,6 +31,16 @@ namespace Game.Overworld
             if (lookInput != null && lookInput.enabled == free) lookInput.enabled = !free;
         }
 
+        /// <summary>Stops steering and releases the cursor so another camera (a fight on the overworld) can take over; it keeps its pose.</summary>
+        public void Suspend()
+        {
+            if (lookInput != null) lookInput.enabled = false;
+            enabled = false;
+        }
+
+        /// <summary>Takes control again and swings back behind the player.</summary>
+        public void Resume() => enabled = true;
+
         /// <summary>Swings the camera behind the followed target and jumps straight to it (use after teleports / scene start).</summary>
         public void SnapBehind()
         {

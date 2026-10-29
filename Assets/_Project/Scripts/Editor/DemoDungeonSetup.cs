@@ -34,11 +34,12 @@ namespace Game.EditorTools
         const string CryptSigil = "item_crypt_sigil";
 
         // Room centres on a 20-unit grid; the wall gap and corridors follow Dungeon_01.
-        const float RoomSize = 12.5f;
-        const float HalfRoom = 6f;
+        const float DefaultHalfRoom = 8f;
         const float WallHeight = 3f;
         const float WallThickness = 0.5f;
-        const float DoorGap = 3.5f;
+        const float CorridorWidth = 3.6f;
+
+        const string CaveFolder = "Assets/_Project/Materials/Cave";
 
         enum Dir { N, E, S, W }
 
@@ -46,6 +47,7 @@ namespace Game.EditorTools
         {
             public string name;
             public Vector2 center;
+            public float half = DefaultHalfRoom;
             public readonly HashSet<Dir> openings = new HashSet<Dir>();
         }
 
@@ -57,6 +59,10 @@ namespace Game.EditorTools
             CreateContent();
             BuildScene();
         }
+
+        /// <summary>Regenerates only the Dungeon_02 geometry, props and enemies, leaving the item / monster / encounter assets untouched.</summary>
+        [MenuItem("Tools/Overworld/Rebuild Demo Dungeon Scene Only (Dungeon_02)")]
+        public static void RunSceneOnly() => BuildScene();
 
         // ------------------------------------------------------------------ content
 
@@ -273,6 +279,8 @@ namespace Game.EditorTools
             boss.viewRadius = 9f;
             boss.transform.localScale = Vector3.one * 1.35f;
 
+            AddPillars(dungeon, wall, props, doors, enemies, root.transform.Find("Player"));
+
             // Bake the NavMesh over the dungeon geometry (doors and props are outside it on purpose).
             var surface = dungeon.gameObject.AddComponent<NavMeshSurface>();
             surface.collectObjects = CollectObjects.Children;
@@ -314,7 +322,7 @@ namespace Game.EditorTools
             AddRoom("Shrine", 20, 40);
             AddRoom("GateHall", 0, 40);
             AddRoom("Antechamber", 0, 60);
-            AddRoom("BossRoom", 0, 80);
+            AddRoom("BossRoom", 0, 80, half: 9f);
 
             var links = new[]
             {
@@ -336,60 +344,276 @@ namespace Game.EditorTools
             foreach (var (a, b) in links) BuildCorridor(parent, Rooms[a], Rooms[b], wall, floor);
         }
 
-        static void AddRoom(string name, float x, float z) => Rooms[name] = new Room { name = name, center = new Vector2(x, z) };
+        static void AddRoom(string name, float x, float z, float half = DefaultHalfRoom) =>
+            Rooms[name] = new Room { name = name, center = new Vector2(x, z), half = half };
+
+        static Material Cave(string name) => AssetDatabase.LoadAssetAtPath<Material>($"{CaveFolder}/{name}.mat");
+
+        /// <summary>The eastern branch and the boss lair are cold blue-grey stone, everything else warm brown rock.</summary>
+        static bool IsCold(Room room) => room.name == "Crypt" || room.name == "Shrine" || room.name == "BossRoom";
+
+        static Material WallFor(Room room, Material fallback) => Cave(IsCold(room) ? "cave_wall_blue" : "cave_wall_brown") ?? fallback;
+
+        static Material FloorFor(Room room, Material fallback) => Cave(IsCold(room) ? "cave_ground_grey" : "cave_ground_brown") ?? fallback;
 
         static Dir Opposite(Dir d) => d == Dir.N ? Dir.S : d == Dir.S ? Dir.N : d == Dir.E ? Dir.W : Dir.E;
 
-        static void BuildRoom(Transform parent, Room room, Material wall, Material floor)
+        static int Seed(string text)
         {
-            var c = room.center;
-            Box(parent, room.name + "_Floor", new Vector3(c.x, -0.5f, c.y), new Vector3(RoomSize, 1f, RoomSize), floor);
+            int hash = 17;
+            foreach (var ch in text) hash = hash * 31 + ch;
+            return hash;
+        }
 
-            foreach (Dir dir in System.Enum.GetValues(typeof(Dir)))
+        static float Jitter(System.Random rng, float amplitude) => (float)(rng.NextDouble() * 2.0 - 1.0) * amplitude;
+
+        static float Range(System.Random rng, float min, float max) => min + (float)rng.NextDouble() * (max - min);
+
+        /// <summary>
+        /// An irregular cave-like room: the four corners wander, every side is a chain of wall pieces pushed in and out (now and then
+        /// into a small niche), and the floor is a mesh that follows exactly that outline. Doorways stay on the straight line so the
+        /// corridors still meet them.
+        /// </summary>
+        static void BuildRoom(Transform parent, Room room, Material wallMat, Material floorMat)
+        {
+            var rng = new System.Random(Seed(room.name));
+            float h = room.half;
+            wallMat = WallFor(room, wallMat);
+            floorMat = FloorFor(room, floorMat);
+
+            // Clockwise from the north-west corner; side i runs from corner i to corner i + 1 (N, E, S, W).
+            var nominal = new[] { new Vector2(-h, h), new Vector2(h, h), new Vector2(h, -h), new Vector2(-h, -h) };
+            var corner = new Vector2[4];
+            for (int i = 0; i < 4; i++) corner[i] = nominal[i] + new Vector2(Jitter(rng, 1.0f), Jitter(rng, 1.0f));
+
+            var ring = new List<Vector2>();
+            var chains = new List<List<Vector2>>();
+            var sides = new[] { Dir.N, Dir.E, Dir.S, Dir.W };
+
+            for (int i = 0; i < 4; i++)
             {
-                bool horizontal = dir == Dir.N || dir == Dir.S; // wall runs along X
-                Vector3 offset = dir == Dir.N ? new Vector3(0, 0, HalfRoom) : dir == Dir.S ? new Vector3(0, 0, -HalfRoom)
-                    : dir == Dir.E ? new Vector3(HalfRoom, 0, 0) : new Vector3(-HalfRoom, 0, 0);
-                Vector3 wallCenter = new Vector3(c.x, WallHeight / 2f, c.y) + offset;
-                string baseName = $"{room.name}_{dir}";
+                Vector2 na = nominal[i], nb = nominal[(i + 1) % 4];
+                Vector2 a = corner[i], b = corner[(i + 1) % 4];
+                Vector2 along = (nb - na).normalized;
+                Vector2 inward = new Vector2(along.y, -along.x);
 
-                if (!room.openings.Contains(dir))
+                if (!room.openings.Contains(sides[i]))
                 {
-                    Box(parent, baseName, wallCenter, horizontal ? new Vector3(RoomSize, WallHeight, WallThickness) : new Vector3(WallThickness, WallHeight, RoomSize), wall);
+                    var chain = Wavy(a, b, inward, rng, taperFrom: false, taperTo: false);
+                    chains.Add(chain);
+                    ring.AddRange(chain.GetRange(0, chain.Count - 1));
                     continue;
                 }
 
-                float seg = (RoomSize - DoorGap) / 2f;
-                float shift = DoorGap / 2f + seg / 2f;
-                for (int i = 0; i < 2; i++)
-                {
-                    float s = i == 0 ? -shift : shift;
-                    Vector3 pos = wallCenter + (horizontal ? new Vector3(s, 0, 0) : new Vector3(0, 0, s));
-                    Vector3 size = horizontal ? new Vector3(seg, WallHeight, WallThickness) : new Vector3(WallThickness, WallHeight, seg);
-                    Box(parent, baseName + (i == 0 ? "_A" : "_B"), pos, size, wall);
-                }
+                // The doorway sits in the middle of the side, on the nominal line.
+                Vector2 gapStart = na + along * (h - CorridorWidth / 2f);
+                Vector2 gapEnd = na + along * (h + CorridorWidth / 2f);
+                var first = Wavy(a, gapStart, inward, rng, taperFrom: false, taperTo: true);
+                var second = Wavy(gapEnd, b, inward, rng, taperFrom: true, taperTo: false);
+                chains.Add(first);
+                chains.Add(second);
+                ring.AddRange(first);
+                ring.AddRange(second.GetRange(0, second.Count - 1));
             }
+
+            var c = room.center;
+            var floorObject = new GameObject(room.name + "_Floor");
+            floorObject.transform.SetParent(parent, false);
+            floorObject.transform.localPosition = new Vector3(c.x, 0f, c.y);
+            var mesh = BuildFloorMesh(ring);
+            floorObject.AddComponent<MeshFilter>().sharedMesh = mesh;
+            floorObject.AddComponent<MeshRenderer>().sharedMaterial = floorMat;
+            floorObject.AddComponent<MeshCollider>().sharedMesh = mesh;
+
+            for (int k = 0; k < chains.Count; k++) BuildWallChain(parent, $"{room.name}_Wall{k}", chains[k], c, wallMat, rng);
+        }
+
+        /// <summary>A line from <paramref name="from"/> to <paramref name="to"/> broken into pieces whose joints are pushed in or out; ends can be pinned for doorways.</summary>
+        static List<Vector2> Wavy(Vector2 from, Vector2 to, Vector2 inward, System.Random rng, bool taperFrom, bool taperTo)
+        {
+            float length = Vector2.Distance(from, to);
+            int pieces = Mathf.Max(1, Mathf.RoundToInt(length / 2.4f));
+            var points = new List<Vector2> { from };
+            int nicheLeft = 0;
+            float nicheDepth = 0f;
+
+            for (int i = 1; i < pieces; i++)
+            {
+                Vector2 basePoint = Vector2.Lerp(from, to, i / (float)pieces);
+
+                // Near a doorway the wall straightens out so it meets the corridor cleanly.
+                float weight = 1f;
+                if (taperFrom) weight = Mathf.Min(weight, Mathf.Clamp01(Vector2.Distance(basePoint, from) / 2.5f));
+                if (taperTo) weight = Mathf.Min(weight, Mathf.Clamp01(Vector2.Distance(basePoint, to) / 2.5f));
+
+                float offset;
+                if (nicheLeft > 0)
+                {
+                    offset = nicheDepth;
+                    nicheLeft--;
+                }
+                else if (weight >= 1f && i < pieces - 2 && rng.NextDouble() < 0.2)
+                {
+                    nicheDepth = -Range(rng, 1.0f, 1.4f); // a recess, away from the room
+                    offset = nicheDepth;
+                    nicheLeft = 1;
+                }
+                else
+                {
+                    offset = Range(rng, -0.5f, 1.0f); // mostly bulging into the room
+                }
+
+                points.Add(basePoint + inward * (offset * weight));
+            }
+
+            points.Add(to);
+            return points;
+        }
+
+        static void BuildWallChain(Transform parent, string name, List<Vector2> points, Vector2 center, Material material, System.Random rng)
+        {
+            for (int i = 0; i + 1 < points.Count; i++)
+            {
+                Vector2 a = points[i], b = points[i + 1];
+                Vector2 delta = b - a;
+                float length = delta.magnitude;
+                if (length < 0.05f) continue;
+
+                float height = Range(rng, 3.2f, 4.4f);
+                Vector2 mid = center + (a + b) / 2f;
+                var piece = Box(parent, $"{name}_{i}", new Vector3(mid.x, height / 2f, mid.y),
+                    new Vector3(WallThickness, height, length + WallThickness * 0.9f), material);
+                piece.transform.localRotation = Quaternion.LookRotation(new Vector3(delta.x, 0f, delta.y));
+            }
+        }
+
+        /// <summary>A flat top following the outline (a fan from the middle, which suits these roundish rooms) with a short skirt so the collider has some depth.</summary>
+        static Mesh BuildFloorMesh(List<Vector2> ring)
+        {
+            int n = ring.Count;
+            // 0 = middle, 1..n = top outline, n+1..2n = top edge of the skirt, 2n+1..3n = bottom of the skirt (kept apart so shading stays flat).
+            var vertices = new List<Vector3> { Vector3.zero };
+            for (int i = 0; i < n; i++) vertices.Add(new Vector3(ring[i].x, 0f, ring[i].y));
+            for (int i = 0; i < n; i++) vertices.Add(new Vector3(ring[i].x, 0f, ring[i].y));
+            for (int i = 0; i < n; i++) vertices.Add(new Vector3(ring[i].x, -1f, ring[i].y));
+
+            var triangles = new List<int>();
+            for (int i = 0; i < n; i++)
+            {
+                int next = (i + 1) % n;
+                triangles.AddRange(new[] { 0, 1 + i, 1 + next }); // top, clockwise seen from above
+                int topA = n + 1 + i, topB = n + 1 + next, lowA = 2 * n + 1 + i, lowB = 2 * n + 1 + next;
+                triangles.AddRange(new[] { topA, lowB, topB });
+                triangles.AddRange(new[] { topA, lowA, lowB });
+            }
+
+            var uvs = new List<Vector2>();
+            foreach (var v in vertices) uvs.Add(new Vector2(v.x, v.z) * 0.25f);
+
+            var mesh = new Mesh { name = "RoomFloor" };
+            mesh.SetVertices(vertices);
+            mesh.SetTriangles(triangles, 0);
+            mesh.SetUVs(0, uvs);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
         }
 
         static void BuildCorridor(Transform parent, Room a, Room b, Material wall, Material floor)
         {
-            Vector2 mid = (a.center + b.center) / 2f;
-            bool vertical = Mathf.Abs(b.center.y - a.center.y) > Mathf.Abs(b.center.x - a.center.x);
-            float length = 20f - 2f * HalfRoom; // gap between the two room walls
-            string name = $"Corridor_{a.name}_{b.name}";
+            Vector2 axis = (b.center - a.center);
+            axis = Mathf.Abs(axis.y) > Mathf.Abs(axis.x) ? new Vector2(0f, Mathf.Sign(axis.y)) : new Vector2(Mathf.Sign(axis.x), 0f);
+            Vector2 side = new Vector2(-axis.y, axis.x);
 
-            if (vertical)
+            Vector2 start = a.center + axis * a.half; // the two doorways, on the rooms' nominal walls
+            Vector2 end = b.center - axis * b.half;
+            Vector2 mid = (start + end) / 2f;
+            float length = Vector2.Distance(start, end);
+            string name = $"Corridor_{a.name}_{b.name}";
+            var rng = new System.Random(Seed(name));
+            bool cold = IsCold(a) && IsCold(b);
+            wall = Cave(cold ? "cave_wall_blue" : "cave_wall_brown") ?? wall;
+            floor = Cave(cold ? "cave_ground_grey" : "cave_ground_brown") ?? floor;
+
+            // Floor runs a little into both rooms so there is no seam at the doorway.
+            var floorBox = Box(parent, name + "_Floor", new Vector3(mid.x, -0.5f, mid.y), new Vector3(CorridorWidth + WallThickness, 1f, length + 2f), floor);
+            floorBox.transform.localRotation = Quaternion.LookRotation(new Vector3(axis.x, 0f, axis.y));
+
+            for (int s = -1; s <= 1; s += 2)
             {
-                Box(parent, name + "_Floor", new Vector3(mid.x, -0.5f, mid.y), new Vector3(3f, 1f, length), floor);
-                Box(parent, name + "_W", new Vector3(mid.x - 1.75f, WallHeight / 2f, mid.y), new Vector3(WallThickness, WallHeight, length), wall);
-                Box(parent, name + "_E", new Vector3(mid.x + 1.75f, WallHeight / 2f, mid.y), new Vector3(WallThickness, WallHeight, length), wall);
+                var pts = new List<Vector2> { start + side * (s * CorridorWidth / 2f) };
+                int pieces = Mathf.Max(2, Mathf.RoundToInt(length / 1.5f));
+                for (int i = 1; i < pieces; i++)
+                {
+                    float t = i / (float)pieces;
+                    float taper = Mathf.Clamp01(Mathf.Min(t, 1f - t) * length / 1.2f);
+                    Vector2 p = Vector2.Lerp(start, end, t) + side * (s * CorridorWidth / 2f);
+                    pts.Add(p - side * s * Range(rng, -0.1f, 0.35f) * taper); // pinches in a little, never out
+                }
+
+                pts.Add(end + side * (s * CorridorWidth / 2f));
+                BuildWallChain(parent, $"{name}_{(s < 0 ? "A" : "B")}", pts, Vector2.zero, wall, rng);
             }
-            else
+        }
+
+        /// <summary>Stone columns near the room corners, to break up the big floors. They keep clear of everything placed in the dungeon (props, enemies, patrol routes).</summary>
+        static void AddPillars(Transform parent, Material material, params Transform[] occupied)
+        {
+            var points = new List<Vector2>();
+            var segments = new List<(Vector2, Vector2)>();
+            foreach (var root in occupied)
             {
-                Box(parent, name + "_Floor", new Vector3(mid.x, -0.5f, mid.y), new Vector3(length, 1f, 3f), floor);
-                Box(parent, name + "_S", new Vector3(mid.x, WallHeight / 2f, mid.y - 1.75f), new Vector3(length, WallHeight, WallThickness), wall);
-                Box(parent, name + "_N", new Vector3(mid.x, WallHeight / 2f, mid.y + 1.75f), new Vector3(length, WallHeight, WallThickness), wall);
+                if (root == null) continue;
+                foreach (var t in root.GetComponentsInChildren<Transform>()) points.Add(new Vector2(t.position.x, t.position.z));
+
+                foreach (var route in root.GetComponentsInChildren<Transform>())
+                {
+                    if (!route.name.EndsWith("_Route") || route.childCount < 2) continue;
+                    for (int i = 0; i < route.childCount; i++)
+                    {
+                        var p = route.GetChild(i).position;
+                        var q = route.GetChild((i + 1) % route.childCount).position;
+                        segments.Add((new Vector2(p.x, p.z), new Vector2(q.x, q.z)));
+                    }
+                }
             }
+
+            foreach (var room in Rooms.Values)
+            {
+                var rng = new System.Random(Seed(room.name) + 7);
+                float reach = room.half - 3.2f;
+                int index = 0;
+                foreach (var corner in new[] { new Vector2(-1, 1), new Vector2(1, 1), new Vector2(1, -1), new Vector2(-1, -1) })
+                {
+                    index++;
+                    if (rng.NextDouble() < 0.3) continue;
+
+                    Vector2 p = room.center + corner * reach + new Vector2(Jitter(rng, 0.6f), Jitter(rng, 0.6f));
+                    if (IsOccupied(p, points, segments, 2.6f)) continue;
+
+                    float radius = Range(rng, 0.45f, 0.7f);
+                    float height = Range(rng, 3.4f, 4.4f);
+                    var pillar = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    pillar.name = $"{room.name}_Pillar{index}";
+                    pillar.transform.SetParent(parent, false);
+                    pillar.transform.localPosition = new Vector3(p.x, height / 2f, p.y);
+                    pillar.transform.localScale = new Vector3(radius * 2f, height / 2f, radius * 2f);
+                    pillar.GetComponent<MeshRenderer>().sharedMaterial = WallFor(room, material);
+                }
+            }
+        }
+
+        static bool IsOccupied(Vector2 p, List<Vector2> points, List<(Vector2, Vector2)> segments, float clearance)
+        {
+            foreach (var q in points) if (Vector2.Distance(p, q) < clearance) return true;
+            foreach (var (a, b) in segments)
+            {
+                Vector2 ab = b - a;
+                float t = ab.sqrMagnitude < 1e-4f ? 0f : Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude);
+                if (Vector2.Distance(p, a + ab * t) < clearance) return true;
+            }
+
+            return false;
         }
 
         static GameObject Box(Transform parent, string name, Vector3 center, Vector3 size, Material material)
@@ -435,7 +659,7 @@ namespace Game.EditorTools
 
         static void Door(Transform parent, Material material, string id, Vector3 position, string[] keys)
         {
-            var go = Box(parent, "Door_" + id, position + new Vector3(0, WallHeight / 2f, 0), new Vector3(3.6f, WallHeight, 0.5f), material);
+            var go = Box(parent, "Door_" + id, position + new Vector3(0, WallHeight / 2f, 0), new Vector3(CorridorWidth + WallThickness, WallHeight, 0.5f), material);
             var door = go.AddComponent<LockedDoor>();
             door.interactionId = id;
             door.prompt = "Unlock gate";

@@ -16,4 +16,5 @@ MonoBehaviour:
   displayName: Thief
   hitDieSides: 6
   evadesWithDex: 1
+  overworldAttack: 1
   skillUnlocks: []

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Game.Data.Enums;
 using UnityEngine;
 
 namespace Game.Data.Definitions
@@ -12,6 +13,9 @@ namespace Game.Data.Definitions
 
         /// <summary>Evade classes (thieves, rangers) add their DEX minor modifier to DEF; every other class gets no DEX bonus.</summary>
         public bool evadesWithDex;
+
+        [Tooltip("How this class opens a fight from the overworld when its hero leads the party (thieves creep up unseen, rangers shoot).")]
+        public OverworldAttackStyle overworldAttack = OverworldAttackStyle.Melee;
 
         public List<SkillUnlock> skillUnlocks = new List<SkillUnlock>();
 

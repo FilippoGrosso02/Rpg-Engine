@@ -622,6 +622,12 @@ namespace Game.Combat.UI.UGUI
         /// </summary>
         private Camera ResolveArenaCamera(CombatantRuntime combatant)
         {
+            // An on-map fight has no arena scene to look in: the runner says which camera renders it.
+            if (BattleCameraHint.Override != null)
+            {
+                return BattleCameraHint.Override;
+            }
+
             if (_arenaCamera != null)
             {
                 return _arenaCamera;

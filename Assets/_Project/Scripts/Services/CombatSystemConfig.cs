@@ -20,6 +20,14 @@ namespace Game.Services
         [SerializeField] private GameObject encounterRunnerPrefab;
         [SerializeField] private GameObject hudPrefab;
 
+        [Tooltip("On: encounters play out on the overworld around the player and the enemy group (needs a runner that supports it). Off: the previous behaviour, a separate battle arena scene.")]
+        [SerializeField] private bool fightInOverworld = true;
+
+        /// <summary>Whether the overworld should hand fights to <see cref="StartEncounterInPlace"/> instead of loading an arena.</summary>
+        public bool FightInOverworld => fightInOverworld && SupportsInPlace;
+
+        private bool SupportsInPlace => encounterRunnerPrefab != null && encounterRunnerPrefab.GetComponent<IInPlaceEncounterRunner>() != null;
+
         /// <summary>
         /// Guards against a second StartEncounter call (e.g. F5 pressed twice, or any other
         /// double-trigger) while one is already running. Without this, a second runner+HUD
@@ -35,7 +43,22 @@ namespace Game.Services
         /// </summary>
         private GameObject _activeRunnerInstance;
 
-        public void StartEncounter(EncounterDefinition encounter, Action<EncounterResult> onComplete)
+        public void StartEncounter(EncounterDefinition encounter, Action<EncounterResult> onComplete, EncounterAdvantage advantage = EncounterAdvantage.None)
+        {
+            Launch(encounter, null, onComplete, advantage);
+        }
+
+        /// <summary>
+        /// Runs the encounter on the loaded level around <paramref name="context"/>. Falls back to the arena flow when the configured
+        /// runner cannot fight in place.
+        /// </summary>
+        public void StartEncounterInPlace(EncounterDefinition encounter, InPlaceEncounterContext context, Action<EncounterResult> onComplete)
+        {
+            Launch(encounter, context, onComplete);
+        }
+
+        private void Launch(EncounterDefinition encounter, InPlaceEncounterContext context, Action<EncounterResult> onComplete,
+            EncounterAdvantage advantage = EncounterAdvantage.None)
         {
             if (_activeRunnerInstance != null)
             {
@@ -67,7 +90,7 @@ namespace Game.Services
 
             var hudInstance = BindHudIfConfigured(runnerInstance, runner);
 
-            runner.StartEncounter(encounter, result =>
+            Action<EncounterResult> finish = result =>
             {
                 _activeRunnerInstance = null;
                 onComplete?.Invoke(result);
@@ -76,7 +99,26 @@ namespace Game.Services
                 {
                     UnityEngine.Object.Destroy(hudInstance);
                 }
-            });
+            };
+
+            if (runner is ISurpriseEncounterRunner surpriseRunner)
+            {
+                surpriseRunner.Advantage = advantage;
+            }
+
+            if (context != null && runner is IInPlaceEncounterRunner inPlaceRunner)
+            {
+                inPlaceRunner.StartEncounterInPlace(encounter, context, finish);
+            }
+            else
+            {
+                if (context != null)
+                {
+                    Debug.LogWarning("[CombatSystemConfig] The runner cannot fight in place — falling back to the arena scene.");
+                }
+
+                runner.StartEncounter(encounter, finish);
+            }
         }
 
         private GameObject BindHudIfConfigured(GameObject runnerInstance, IEncounterRunner runner)

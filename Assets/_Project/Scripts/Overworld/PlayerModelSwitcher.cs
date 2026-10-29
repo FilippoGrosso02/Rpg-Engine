@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using Game.Common;
+using Game.Data.Definitions;
 using Game.Data.Registry;
 using Game.Data.State;
 using UnityEngine;
@@ -44,7 +46,9 @@ namespace Game.Overworld
         {
             if (Input.GetKeyDown(cycleKey))
             {
-                PartyRoster.CycleLeader();
+                // With followers the next hero has to walk up first; alone (or without models) the switch is immediate.
+                var followers = FindAnyObjectByType<PartyFollowers>();
+                if (followers == null || !followers.RequestSwitch()) PartyRoster.CycleLeader();
             }
 
             float full = fullRunSpeed > 0f ? fullRunSpeed : (_player != null ? _player.moveSpeed : 5f);
@@ -52,6 +56,66 @@ namespace Game.Overworld
             float target = Mathf.Clamp01(new Vector2(v.x, v.z).magnitude / Mathf.Max(0.01f, full));
             _blend = Mathf.MoveTowards(_blend, target, 8f * Time.deltaTime);
             _animator.SetSpeed(_blend);
+        }
+
+        GameObject _preloaded;
+        string _preloadedId;
+
+        /// <summary>
+        /// Creates a hero's model ahead of a leader switch (hidden), so the swap itself is a cheap activation instead of an
+        /// instantiate on the very frame the new leader takes over.
+        /// </summary>
+        public void Preload(string actorId)
+        {
+            ClearPreload();
+            var actor = DatabaseRegistry.GetActor(actorId);
+            if (actor == null || actor.battleModelPrefab == null) return;
+
+            _preloaded = Instantiate(actor.battleModelPrefab, transform);
+            _preloaded.name = "Model (next)";
+            _preloaded.transform.localPosition = Vector3.zero;
+            _preloaded.transform.localRotation = Quaternion.identity;
+            _preloaded.SetActive(false);
+            _preloadedId = actorId;
+        }
+
+        public void ClearPreload()
+        {
+            if (_preloaded != null) Destroy(_preloaded);
+            _preloaded = null;
+            _preloadedId = null;
+        }
+
+        /// <summary>Continues a run animation that was already playing (a hero who walked up to take the lead).</summary>
+        public void SetBlend(float blend) => _blend = Mathf.Clamp01(blend);
+
+        /// <summary>
+        /// Plays the leader's basic attack, the same clip a fight would use (the equipped weapon's list first, then the character's
+        /// own set, cycling through combos). Returns how long to wait before the blow has landed, or 0 if there is nothing to play.
+        /// </summary>
+        public float PlaySwing(float followThrough = 0.5f)
+        {
+            if (_animator == null || string.IsNullOrEmpty(_currentId)) return 0f;
+
+            var actor = DatabaseRegistry.GetActor(_currentId);
+            List<AnimationAction> weaponClips = null;
+            var weaponId = actor != null ? Loadout.GetWeaponId(actor) : null;
+            var weapon = string.IsNullOrEmpty(weaponId) ? null : DatabaseRegistry.GetWeapon(weaponId);
+            if (weapon != null && weapon.basicAttackAnimations != null && weapon.basicAttackAnimations.Count > 0)
+                weaponClips = weapon.basicAttackAnimations;
+
+            var action = _animator.NextBasicAttack(weaponClips);
+            if (action == null || _animator.Play(action) <= 0f) return 0f;
+
+            // Past the moment of impact, most of the way through the follow-through.
+            return Mathf.Lerp(action.ImpactTime, action.Duration, Mathf.Clamp01(followThrough));
+        }
+
+        /// <summary>Hides or shows the current model while the leader is mid-hand-over (the old leader walks off as a separate model).</summary>
+        public void SetModelVisible(bool visible)
+        {
+            var model = transform.Find("Model");
+            if (model != null) model.gameObject.SetActive(visible);
         }
 
         void Refresh()
@@ -81,7 +145,19 @@ namespace Game.Overworld
                 Destroy(old.gameObject);
             }
 
-            var model = Instantiate(actor.battleModelPrefab, transform);
+            GameObject model;
+            if (_preloaded != null && _preloadedId == leaderId)
+            {
+                model = _preloaded;
+                model.SetActive(true);
+                _preloaded = null;
+                _preloadedId = null;
+            }
+            else
+            {
+                model = Instantiate(actor.battleModelPrefab, transform);
+            }
+
             model.name = "Model";
             model.transform.localPosition = Vector3.zero;
             model.transform.localRotation = Quaternion.identity;

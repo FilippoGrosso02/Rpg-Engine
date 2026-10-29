@@ -173,11 +173,13 @@ namespace Game.EditorTools
             {
                 c.hitDieSides = 8;
                 c.evadesWithDex = true; // evade class: DEX minor modifier counts towards DEF
+                c.overworldAttack = OverworldAttackStyle.Ranged;
             });
             var thiefClass = Create<ClassDefinition>("Classes", "class_thief", "Thief", c =>
             {
                 c.hitDieSides = 6;
                 c.evadesWithDex = true;
+                c.overworldAttack = OverworldAttackStyle.Stealth;
             });
             // No spellcasting class for now: the spells below stay as assets (and tested) but nobody knows them.
 

@@ -10,6 +10,7 @@ using Game.Data.Enums;
 using Game.Data.Registry;
 using Game.Data.Rules;
 using Game.Data.State;
+using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.SceneManagement;
@@ -23,7 +24,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
     /// assembly only ever talks to it through IEncounterRunner/ICombatEvents/IPlayerCommandInput
     /// plus the plain Contracts data types — a UI layer never needs to know this class exists.
     /// </summary>
-    public class EncounterRunner : MonoBehaviour, IEncounterRunner, ICombatEvents, IPlayerCommandInput
+    public class EncounterRunner : MonoBehaviour, IEncounterRunner, IInPlaceEncounterRunner, ISurpriseEncounterRunner, ICombatEvents, IPlayerCommandInput
     {
         private const string BattleSceneName = "BattleArena_01";
         private const int MaxTurns = 500;
@@ -36,6 +37,9 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         private readonly Dictionary<CombatantRuntime, List<AnimationAction>> _weaponAttackAnimations = new Dictionary<CombatantRuntime, List<AnimationAction>>();
         private readonly HashSet<CombatantRuntime> _dyingViews = new HashSet<CombatantRuntime>();
         private const int TurnOrderPreviewCount = 6;
+
+        [Tooltip("Third-person camera rig spawned for in-place (on-map) fights, where no arena scene supplies one. Built by Tools/Combat/Setup In-Place Combat.")]
+        [SerializeField] private BattleCameraRig inPlaceCameraRigPrefab;
 
         [Tooltip("Both sides use 'attack nearest' AI — set by the PlayMode smoke test to run headless.")]
         public bool autoPilotAllSides;
@@ -63,6 +67,11 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         private Dictionary<CombatantRuntime, GameObject> _views;
         private Scene _battleScene;
         private BattleArenaSpawnPoints _spawnPoints;
+
+        // In-place (on-map) mode: set by StartEncounterInPlace. Null means the legacy arena-scene flow.
+        private InPlaceEncounterContext _inPlace;
+        private InPlaceFormation.Layout _inPlaceLayout;
+        private Vector3 _partyForward = Vector3.forward;
         private Action<EncounterResult> _onComplete;
         private EncounterDefinition _encounter;
         private TurnScheduler _scheduler;
@@ -100,7 +109,23 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         private static readonly Color AllyHighlightColor = new Color(0.35f, 0.55f, 0.95f);
         private static readonly Color EnemyHighlightColor = new Color(0.85f, 0.35f, 0.35f);
 
+        /// <summary>Who caught the other side off guard; the side with the advantage acts once before the normal order starts. Read at the start of the fight.</summary>
+        public EncounterAdvantage Advantage { get; set; }
+
         public void StartEncounter(EncounterDefinition encounter, Action<EncounterResult> onComplete)
+        {
+            _inPlace = null;
+            Begin(encounter, onComplete);
+        }
+
+        public void StartEncounterInPlace(EncounterDefinition encounter, InPlaceEncounterContext context, Action<EncounterResult> onComplete)
+        {
+            _inPlace = context ?? throw new ArgumentNullException(nameof(context));
+            Advantage = context.advantage;
+            Begin(encounter, onComplete);
+        }
+
+        private void Begin(EncounterDefinition encounter, Action<EncounterResult> onComplete)
         {
             _encounter = encounter;
             _onComplete = onComplete;
@@ -318,18 +343,35 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
         private IEnumerator RunEncounter()
         {
-            yield return SceneManager.LoadSceneAsync(BattleSceneName, LoadSceneMode.Additive);
+            var partyIds = ResolvePartyIds(_encounter);
 
-            _battleScene = SceneManager.GetSceneByName(BattleSceneName);
-            _spawnPoints = FindSpawnPoints(_battleScene);
-            BindArenaCamera();
+            if (_inPlace == null)
+            {
+                yield return SceneManager.LoadSceneAsync(BattleSceneName, LoadSceneMode.Additive);
+
+                _battleScene = SceneManager.GetSceneByName(BattleSceneName);
+                _spawnPoints = FindSpawnPoints(_battleScene);
+                _partyForward = Vector3.forward;
+                _inPlaceLayout = null;
+                BindArenaCamera();
+            }
+            else
+            {
+                _spawnPoints = null;
+                _inPlaceLayout = InPlaceFormation.Compute(_inPlace.partyPosition, _inPlace.enemyPosition, _inPlace.fallbackForward,
+                    partyIds.Count, _encounter.enemyIds.Count, InPlaceFormation.ClampToNavMesh);
+                ApplyKnownPositions(_inPlaceLayout.party, _inPlace.partyPositions);
+                ApplyKnownPositions(_inPlaceLayout.enemies, _inPlace.enemyPositions);
+                _partyForward = _inPlaceLayout.forward;
+                BindInPlaceCamera();
+            }
 
             _combatants = new List<CombatantRuntime>();
             _views = new Dictionary<CombatantRuntime, GameObject>();
             _dyingViews.Clear();
             _weaponAttackAnimations.Clear();
 
-            SpawnParty(ResolvePartyIds(_encounter));
+            SpawnParty(partyIds);
             SpawnEnemies(_encounter.enemyIds);
 
             // Start on the first ally (looking at the nearest enemy) so the camera is sensible even if an
@@ -338,7 +380,13 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             var firstAlly = _combatants.FirstOrDefault(c => c.isPlayerSide);
             FocusCameraOn(firstAlly, _combatants.Where(c => !c.isPlayerSide).ToList());
 
-            _scheduler = new TurnScheduler(_combatants);
+            // On the map the camera blends in from the exploration view; give it a beat before the first turn.
+            if (_inPlace != null && _inPlace.introSeconds > 0f)
+            {
+                yield return new WaitForSeconds(_inPlace.introSeconds);
+            }
+
+            _scheduler = new TurnScheduler(_combatants, null, Advantage);
             RaiseTurnOrderChanged();
 
             EncounterResult result = CheckWinLoss();
@@ -414,9 +462,19 @@ namespace Game.Combat.TrailsBattle3D.Runtime
                 yield return new WaitUntil(() => _resultAcknowledged);
             }
 
-            CleanupViews();
-            _cameraRig = null;
-            yield return SceneManager.UnloadSceneAsync(_battleScene);
+            if (_inPlace == null)
+            {
+                CleanupViews();
+                _cameraRig = null;
+                yield return SceneManager.UnloadSceneAsync(_battleScene);
+            }
+            else
+            {
+                result.leaderEndPosition = FindLeaderEndPosition();
+                CleanupViews();
+                TearDownInPlace();
+            }
+
             RestoreCursor();
 
             _onComplete?.Invoke(result);
@@ -906,6 +964,97 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             }
         }
 
+        /// <summary>
+        /// On the map there is no arena camera: the exploration camera (and its Cinemachine brain) stays the one that renders, and a
+        /// higher-priority battle rig is spawned so the brain blends to it.
+        /// </summary>
+        private void BindInPlaceCamera()
+        {
+            var brain = FindAnyObjectByType<CinemachineBrain>();
+            var camera = brain != null && brain.OutputCamera != null ? brain.OutputCamera : Camera.main;
+
+            var targeting = GetComponent<TargetingInput>();
+            if (targeting != null)
+            {
+                targeting.arenaCamera = camera;
+            }
+
+            BattleCameraHint.Override = camera;
+
+            if (inPlaceCameraRigPrefab == null)
+            {
+                Debug.LogWarning("[EncounterRunner] No inPlaceCameraRigPrefab assigned: the fight has no third-person camera. Run Tools/Combat/Setup In-Place Combat.", this);
+                return;
+            }
+
+            _cameraRig = Instantiate(inPlaceCameraRigPrefab, _inPlace.partyPosition, Quaternion.identity);
+        }
+
+        /// <summary>Combatants whose overworld model already stands somewhere spawn exactly there instead of in a formation slot.</summary>
+        private static void ApplyKnownPositions(Vector3[] slots, Vector3?[] known)
+        {
+            if (known == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < slots.Length && i < known.Length; i++)
+            {
+                if (known[i].HasValue)
+                {
+                    slots[i] = known[i].Value;
+                }
+            }
+        }
+
+        /// <summary>Where the party leader stands at the end of the fight (first living ally, else the first ally).</summary>
+        private Vector3? FindLeaderEndPosition()
+        {
+            var leader = _combatants.FirstOrDefault(c => c.isPlayerSide && !c.IsDefeated) ?? _combatants.FirstOrDefault(c => c.isPlayerSide);
+            return leader != null ? leader.position : (Vector3?)null;
+        }
+
+        /// <summary>Removes everything this fight added to the level. The exploration camera takes over again by itself (the rig is inactive).</summary>
+        private void TearDownInPlace()
+        {
+            BattleCameraHint.Override = null;
+
+            foreach (var leftover in new Component[] { _movementArea, _attackRangeArea, _aoeArea, _hoverHighlightRing, _movementPathPreview })
+            {
+                if (leftover != null)
+                {
+                    Destroy(leftover.gameObject);
+                }
+            }
+
+            _movementArea = null;
+            _attackRangeArea = null;
+            _aoeArea = null;
+            _hoverHighlightRing = null;
+            _movementPathPreview = null;
+
+            if (_cameraRig != null)
+            {
+                // Deactivated first so the brain blends away from it; destroyed a little later, independently of this runner.
+                _cameraRig.gameObject.SetActive(false);
+                Destroy(_cameraRig.gameObject, 3f);
+                _cameraRig = null;
+            }
+        }
+
+        /// <summary>Arena mode moves helper objects into the arena scene (unloaded with it); on the map they hang under the runner instead.</summary>
+        private void PlaceInBattleScene(GameObject helper)
+        {
+            if (_inPlace != null)
+            {
+                helper.transform.SetParent(transform, true);
+            }
+            else
+            {
+                SceneManager.MoveGameObjectToScene(helper, _battleScene);
+            }
+        }
+
         private void EnsureRangeAreas()
         {
             // Range areas (reach, not impact): very light fill and a dashed edge, so they read as "you could go/hit here".
@@ -929,7 +1078,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
         private AreaIndicator CreateAreaIndicator(string objectName, Color color, float fillAlpha, float edgeAlpha, bool dashed)
         {
             var areaObject = new GameObject(objectName);
-            SceneManager.MoveGameObjectToScene(areaObject, _battleScene);
+            PlaceInBattleScene(areaObject);
             var area = areaObject.AddComponent<AreaIndicator>();
             area.fillColor = new Color(color.r, color.g, color.b, fillAlpha);
             area.edgeColor = new Color(color.r, color.g, color.b, edgeAlpha);
@@ -997,14 +1146,14 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             if (_hoverHighlightRing == null)
             {
                 var hoverObject = new GameObject("HoverHighlightRing");
-                SceneManager.MoveGameObjectToScene(hoverObject, _battleScene);
+                PlaceInBattleScene(hoverObject);
                 _hoverHighlightRing = hoverObject.AddComponent<HoverHighlightRing>();
             }
 
             if (_movementPathPreview == null)
             {
                 var previewObject = new GameObject("MovementPathPreview");
-                SceneManager.MoveGameObjectToScene(previewObject, _battleScene);
+                PlaceInBattleScene(previewObject);
                 _movementPathPreview = previewObject.AddComponent<MovementPathPreview>();
             }
         }
@@ -1310,7 +1459,9 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
                 var spawnPoint = GetSpawnPoint(_spawnPoints != null ? _spawnPoints.partySpawnPoints : null, i);
                 var runtime = BuildAllyRuntime(actorDef);
-                runtime.position = spawnPoint != null ? spawnPoint.position : new Vector3(-i * 2f, 0f, -3f);
+                runtime.position = _inPlaceLayout != null
+                    ? _inPlaceLayout.party[i]
+                    : spawnPoint != null ? spawnPoint.position : new Vector3(-i * 2f, 0f, -3f);
 
                 _combatants.Add(runtime);
                 var wornWeaponId = Loadout.GetWeaponId(actorDef);
@@ -1339,7 +1490,9 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
                 var spawnPoint = GetSpawnPoint(_spawnPoints != null ? _spawnPoints.enemySpawnPoints : null, i);
                 var runtime = BuildEnemyRuntime(enemyDef);
-                runtime.position = spawnPoint != null ? spawnPoint.position : new Vector3(-i * 2f, 0f, 3f);
+                runtime.position = _inPlaceLayout != null
+                    ? _inPlaceLayout.enemies[i]
+                    : spawnPoint != null ? spawnPoint.position : new Vector3(-i * 2f, 0f, 3f);
 
                 _combatants.Add(runtime);
                 SpawnView(enemyDef.battleModelPrefab, runtime, enemyDef.animationSet);
@@ -1455,7 +1608,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             }
 
             var instance = Instantiate(prefab, runtime.position, Quaternion.identity);
-            SceneManager.MoveGameObjectToScene(instance, _battleScene);
+            PlaceInBattleScene(instance);
 
             var view = instance.GetComponent<CombatantView>();
             if (view == null)
@@ -1479,7 +1632,7 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             }
 
             animator.Initialize(animationSet);
-            instance.transform.rotation = Quaternion.LookRotation(runtime.isPlayerSide ? Vector3.forward : Vector3.back);
+            instance.transform.rotation = Quaternion.LookRotation(runtime.isPlayerSide ? _partyForward : -_partyForward);
             _views[runtime] = instance;
 
             AddHoverHitbox(instance);

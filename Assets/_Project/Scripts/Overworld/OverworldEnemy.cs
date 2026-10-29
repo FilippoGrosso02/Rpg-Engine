@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Game.Combat.Contracts;
 using UnityEngine;
 using UnityEngine.AI;
@@ -21,6 +22,8 @@ namespace Game.Overworld
         [Tooltip("Stable unique id within the dungeon; used later to remember defeated enemies.")]
         public string enemyId;
         public EncounterDefinition encounter;
+        [Tooltip("Show every enemy of the encounter on the overworld, patrolling behind this one (this enemy stands for the first). Off: only this model is visible.")]
+        public bool showGroupMembers = true;
         [Tooltip("Winning this fight ends the demo (final boss).")]
         public bool endsDemo;
 
@@ -49,6 +52,57 @@ namespace Game.Overworld
 
         public State CurrentState { get; private set; } = State.Patrol;
 
+        /// <summary>True while this enemy is hunting the player. Patrolling or walking back to its route means it has not noticed them.</summary>
+        public bool HasNoticedPlayer => CurrentState == State.Chase;
+
+        /// <summary>
+        /// Distance from <paramref name="from"/> to the nearest model of this group (the enemy itself or one of its trailing members)
+        /// that lies within <paramref name="coneDegrees"/> of <paramref name="facing"/>. <paramref name="inCone"/> is false when none does.
+        /// </summary>
+        /// <summary>The positions of every model in this group: the enemy itself and its trailing members.</summary>
+        public IEnumerable<Vector3> ModelPositions()
+        {
+            yield return transform.position;
+            var group = GetComponent<OverworldEnemyGroup>();
+            if (group != null) foreach (var member in group.Members) yield return member.transform.position;
+        }
+
+        /// <summary>The model of this group that stands closest to <paramref name="from"/>.</summary>
+        public Vector3 NearestModelPosition(Vector3 from)
+        {
+            var best = transform.position;
+            float bestDistance = float.MaxValue;
+            foreach (var position in ModelPositions())
+            {
+                var delta = position - from;
+                delta.y = 0f;
+                if (delta.sqrMagnitude >= bestDistance) continue;
+                bestDistance = delta.sqrMagnitude;
+                best = position;
+            }
+
+            return best;
+        }
+
+        public float NearestDistanceTo(Vector3 from, Vector3 facing, float coneDegrees, out bool inCone)
+        {
+            float best = float.MaxValue;
+            var group = GetComponent<OverworldEnemyGroup>();
+
+            bool Consider(Vector3 position)
+            {
+                var delta = position - from;
+                delta.y = 0f;
+                if (delta.sqrMagnitude > 0.01f && facing.sqrMagnitude > 0.0001f && Vector3.Angle(facing, delta) > coneDegrees * 0.5f) return false;
+                best = Mathf.Min(best, delta.magnitude);
+                return true;
+            }
+
+            inCone = Consider(transform.position);
+            if (group != null) foreach (var member in group.Members) inCone |= Consider(member.transform.position);
+            return best;
+        }
+
         NavMeshAgent _agent;
         Transform _player;
         Vector3 _home;
@@ -69,6 +123,25 @@ namespace Game.Overworld
             _home = transform.position;
         }
 
+        /// <summary>Stops (or resumes) this enemy's brain and movement. Used while a fight plays out on the overworld.</summary>
+        public void Freeze(bool frozen)
+        {
+            if (_agent == null) return; // destroyed in Awake (already defeated)
+            enabled = !frozen; // OnEnable clears the stale path when unfreezing
+            var group = GetComponent<OverworldEnemyGroup>();
+            if (group != null) group.Freeze(frozen);
+            if (!_agent.isOnNavMesh) return;
+            _agent.isStopped = frozen;
+            if (frozen) _agent.velocity = Vector3.zero;
+        }
+
+        /// <summary>The group's other members only exist on the map when fights are played out there; with the arena one model stands for the whole group.</summary>
+        static bool FightsInPlace()
+        {
+            var director = FindAnyObjectByType<OverworldDirector>();
+            return director != null && director.UsesInPlaceCombat;
+        }
+
         /// <summary>Drop any chase and walk back to the patrol route.</summary>
         public void ForgetPlayer()
         {
@@ -83,6 +156,8 @@ namespace Game.Overworld
             _patrolIndex = 0;
             _waitTimer = 0f;
             SetState(State.Patrol);
+            var group = GetComponent<OverworldEnemyGroup>();
+            if (group != null) group.WarpToSlots();
         }
 
         void Start()
@@ -91,6 +166,9 @@ namespace Game.Overworld
             var playerGo = GameObject.FindWithTag("Player");
             if (playerGo != null) _player = playerGo.transform;
             SetState(State.Patrol);
+
+            if (showGroupMembers && encounter != null && encounter.enemyIds.Count > 1 && FightsInPlace())
+                gameObject.AddComponent<OverworldEnemyGroup>().Build(this);
         }
 
         void OnEnable()
