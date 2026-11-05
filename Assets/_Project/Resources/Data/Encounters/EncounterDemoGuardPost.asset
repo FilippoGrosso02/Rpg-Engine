@@ -13,6 +13,7 @@ MonoBehaviour:
   m_Name: EncounterDemoGuardPost
   m_EditorClassIdentifier: Game.Combat.Contracts::Game.Combat.Contracts.EncounterDefinition
   useFixedParty: 0
+  arenaTemplate: Cave
   partyActorIds:
   - actor_warrior
   - actor_ranger

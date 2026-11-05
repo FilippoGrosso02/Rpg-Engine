@@ -34,6 +34,11 @@ namespace Game.Overworld
         [Tooltip("In-place fights: seconds the camera takes to blend between the exploration view and the battle view.")]
         public float cameraBlendSeconds = 0.8f;
 
+        [Header("Lighting")]
+        [Tooltip("Dark dungeon: turn off the scene's directional light and give the characters torches (on-map fights only).")]
+        public bool torchLighting = true;
+        public Color ambientLight = new Color(0.07f, 0.065f, 0.09f);
+
         public bool InBattle { get; private set; }
 
         /// <summary>
@@ -56,19 +61,40 @@ namespace Game.Overworld
 
             // The rest of the party walks behind the player; created here (not in the scene) so every dungeon gets it.
             // Only for on-map fights: with the arena the overworld shows the leader alone, as it always did.
+            if (UsesInPlaceCombat && torchLighting)
+            {
+                DungeonLighting.Apply(ambientLight);
+                if (player != null) CharacterTorch.Attach(player.gameObject, dimsWhenHidden: true);
+            }
+
             if (player != null && UsesInPlaceCombat)
             {
                 _party = GetComponent<PartyFollowers>();
                 if (_party == null) _party = gameObject.AddComponent<PartyFollowers>();
                 _party.Init(player);
+                if (GetComponent<PartyStealthController>() == null) gameObject.AddComponent<PartyStealthController>();
             }
 
             // Left mouse swings the leader's weapon; hitting an enemy group starts the fight (an ambush if it had not noticed the party).
             if (GetComponent<PlayerAttack>() == null) gameObject.AddComponent<PlayerAttack>();
         }
 
-        void OnEnable() => OverworldEnemy.PlayerContacted += BeginEncounter;
-        void OnDisable() => OverworldEnemy.PlayerContacted -= BeginEncounter;
+        void OnGUI() => SurpriseBanner.Draw();
+
+        void OnEnable()
+        {
+            OverworldEnemy.PlayerContacted += BeginEncounter;
+            OverworldEnemy.AmbushTouched += OnAmbushTouched;
+        }
+
+        void OnDisable()
+        {
+            OverworldEnemy.PlayerContacted -= BeginEncounter;
+            OverworldEnemy.AmbushTouched -= OnAmbushTouched;
+        }
+
+        /// <summary>An undetected ambush connected. It outranks everything else, even a Hidden leader's attack that is under way: the enemies are the ones with the advantage.</summary>
+        void OnAmbushTouched(OverworldEnemy enemy) => BeginEncounter(enemy, EncounterAdvantage.Enemies);
 
         /// <summary>The player is mid-swing at an enemy: contact from another enemy must not start a different fight meanwhile.</summary>
         public bool AttackPending { get; set; }
@@ -95,6 +121,8 @@ namespace Game.Overworld
             }
 
             InBattle = true;
+            PartyRules.EndHidden(); // combat starting always ends Hidden
+            SurpriseBanner.Show(advantage);
             GameAudio.SetMusicState(AudioMusicState.Battle);
             _activeEnemy = enemy;
 

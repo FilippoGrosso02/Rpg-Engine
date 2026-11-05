@@ -14,4 +14,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   encounterRunnerPrefab: {fileID: 5011835371110205731, guid: f3e7155eec3933d4d95c4674bdc2aa79, type: 3}
   hudPrefab: {fileID: 1091669588802039544, guid: 148f413603f05d94491b07bb0d2ae3f4, type: 3}
-  fightInOverworld: 0
+  fightInOverworld: 1

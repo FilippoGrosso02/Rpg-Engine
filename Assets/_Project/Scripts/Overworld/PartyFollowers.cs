@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Game.Data.Registry;
 using Game.Data.State;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace Game.Overworld
 {
@@ -59,9 +60,17 @@ namespace Game.Overworld
             Sync();
         }
 
-        void OnEnable() => PartyRoster.Changed += Sync;
+        void OnEnable()
+        {
+            PartyRoster.Changed += Sync;
+            PartyRules.Changed += ApplyMode;
+        }
 
-        void OnDisable() => PartyRoster.Changed -= Sync;
+        void OnDisable()
+        {
+            PartyRoster.Changed -= Sync;
+            PartyRules.Changed -= ApplyMode;
+        }
 
         /// <summary>
         /// Switching the leader is a hand-over on foot: the current leader steps out of the player and walks back to the end of the line
@@ -130,7 +139,7 @@ namespace Game.Overworld
             _steppingBack = null;
             if (stepping != null && PartyRoster.Count >= 2)
             {
-                stepping.follow = () => Following;
+                stepping.follow = () => !Detached;
                 _followers[_oldLeaderId] = stepping; // already in place: Sync only has to update its slot
             }
             else if (stepping != null)
@@ -181,16 +190,32 @@ namespace Game.Overworld
             _followers.Clear();
         }
 
+        [Header("Detached mode")]
+        [Tooltip("While detached the followers stay where they are and only walk when the leader gets further than this away in a straight line (about the size of a battle arena).")]
+        public float detachedLeash = 25f;
+
+        bool Detached => PartyRules.Mode == PartyMode.Detached;
+
         /// <summary>A single file behind the leader: x = right (none), y = behind.</summary>
         Vector2 LineSlot(int index) => new Vector2(0f, firstFollowerDistance + index * followerSpacing);
 
         void Configure(GroupFollower follower)
         {
+            CharacterTorch.Attach(follower.gameObject);
             follower.baseSpeed = _player.moveSpeed;
             follower.wander = wander;
-            follower.follow = () => Following;
-            follower.leashRange = encounterRange;
-            follower.warpDistance = encounterRange * 2.5f;
+            follower.follow = () => !Detached; // detached: hold ground, only the leash pulls them along
+            follower.leashRange = Detached ? detachedLeash : encounterRange;
+            follower.warpDistance = Detached ? detachedLeash * 2.5f : encounterRange * 2.5f;
+        }
+
+        /// <summary>The party mode changed: attached followers close up behind the leader, detached ones stay put (within the leash).</summary>
+        void ApplyMode()
+        {
+            for (int i = 1; i < PartyRoster.Count; i++)
+            {
+                if (_followers.TryGetValue(PartyRoster.Members[i], out var follower) && follower != null) Configure(follower);
+            }
         }
 
         static float FlatDistance(Vector3 a, Vector3 b)
@@ -245,10 +270,20 @@ namespace Game.Overworld
             for (int i = 0; i < positions.Length; i++)
             {
                 if (i == 0) positions[i] = _steppingBack != null ? _steppingBack.transform.position : _player != null ? _player.transform.position : (Vector3?)null;
-                else if (_followers.TryGetValue(PartyRoster.Members[i], out var follower) && follower != null) positions[i] = follower.transform.position;
+                else if (_followers.TryGetValue(PartyRoster.Members[i], out var follower) && follower != null)
+                {
+                    positions[i] = follower.transform.position; // detached followers fight from where they stand, far back
+                }
             }
 
             return positions;
+        }
+
+        /// <summary>Where every party member stands on the map (leader first): what an enemy's ambush can touch.</summary>
+        public IEnumerable<Vector3> MemberPositions()
+        {
+            if (_player != null) yield return _player.transform.position;
+            foreach (var follower in Followers) if (follower != null) yield return follower.transform.position;
         }
     }
 }

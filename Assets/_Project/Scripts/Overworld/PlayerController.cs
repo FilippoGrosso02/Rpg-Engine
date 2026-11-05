@@ -18,6 +18,15 @@ namespace Game.Overworld
         [Tooltip("Ignore movement input (e.g. while the party swaps its leader).")]
         public bool movementLocked;
 
+        /// <summary>Aiming (right mouse held): the character faces where the camera looks and walks slower.</summary>
+        [HideInInspector] public bool aiming;
+
+        [Tooltip("Walking speed while aiming, as a fraction of the normal speed.")]
+        [Range(0.2f, 1f)] public float aimSpeedFactor = 0.6f;
+
+        [Tooltip("Walking speed while Hidden (sneaking), as a fraction of the normal speed.")]
+        [Range(0.2f, 1f)] public float sneakSpeedFactor = 0.55f;
+
         CharacterController _controller;
         Vector3[] _autoCorners;
         int _autoIndex;
@@ -48,14 +57,23 @@ namespace Game.Overworld
                 move = GetCameraRelativeMove(input, yaw);
             }
 
-            if (move.sqrMagnitude > 0.0001f)
+            bool aimingNow = aiming && _autoCorners == null && cam != null;
+            if (aimingNow)
+            {
+                // Face where the camera looks, so the shot or the swing goes the way the crosshair points.
+                var targetRot = Quaternion.Euler(0f, yaw, 0f);
+                transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRot, turnSpeed * Time.deltaTime);
+            }
+            else if (move.sqrMagnitude > 0.0001f)
             {
                 var targetRot = Quaternion.LookRotation(move, Vector3.up);
                 transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRot, turnSpeed * Time.deltaTime);
             }
 
+            float speed = aimingNow ? moveSpeed * aimSpeedFactor : moveSpeed;
+            if (PartyRules.Hidden && _autoCorners == null) speed *= sneakSpeedFactor;
             _verticalVelocity = _controller.isGrounded ? -1f : _verticalVelocity + gravity * Time.deltaTime;
-            Vector3 velocity = move * moveSpeed + Vector3.up * _verticalVelocity;
+            Vector3 velocity = move * speed + Vector3.up * _verticalVelocity;
             _controller.Move(velocity * Time.deltaTime);
 
             if (move.sqrMagnitude > 0.0001f && _controller.isGrounded && Time.time >= _nextFootstep)

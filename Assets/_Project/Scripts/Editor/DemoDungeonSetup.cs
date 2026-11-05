@@ -36,8 +36,8 @@ namespace Game.EditorTools
         // Room centres on a 20-unit grid; the wall gap and corridors follow Dungeon_01.
         const float DefaultHalfRoom = 8f;
         const float WallHeight = 3f;
-        const float WallThickness = 0.5f;
-        const float CorridorWidth = 3.6f;
+        internal const float WallThickness = 0.5f;
+        internal const float CorridorWidth = 3.6f;
 
         const string CaveFolder = "Assets/_Project/Materials/Cave";
 
@@ -66,7 +66,7 @@ namespace Game.EditorTools
 
         // ------------------------------------------------------------------ content
 
-        static void CreateContent()
+        internal static void CreateContent()
         {
             foreach (var folder in new[] { "Items", "Weapons", "Armor", "Enemies", "Encounters" })
                 EnsureFolder($"{DataRoot}/{folder}");
@@ -174,7 +174,7 @@ namespace Game.EditorTools
             AssetDatabase.Refresh();
         }
 
-        static GameObject Model(string name) => AssetDatabase.LoadAssetAtPath<GameObject>($"{ModelFolder}/{name}.prefab");
+        internal static GameObject Model(string name) => AssetDatabase.LoadAssetAtPath<GameObject>($"{ModelFolder}/{name}.prefab");
 
         static void Monster(EnemyDefinition e, GameObject model, AnimationSetDefinition anim, string role)
         {
@@ -197,13 +197,18 @@ namespace Game.EditorTools
                 AssetDatabase.CreateAsset(encounter, path);
             }
 
+            encounter.arenaTemplate = ArenaFor(assetName);
             encounter.useFixedParty = false;
             encounter.partyActorIds = new List<string> { "actor_warrior", "actor_ranger", "actor_thief" };
             encounter.enemyIds = new List<string>(enemyIds);
             EditorUtility.SetDirty(encounter);
         }
 
-        static EncounterDefinition LoadEncounter(string assetName) =>
+        /// <summary>Arena used when fights load a separate scene: the east branch is a crypt, the boss has the lair, the rest is cave.</summary>
+        static string ArenaFor(string encounterAssetName) =>
+            encounterAssetName == "EncounterDemoCrypt" ? "Crypt" : encounterAssetName == "EncounterDemoBoss" ? "Lair" : "Cave";
+
+        internal static EncounterDefinition LoadEncounter(string assetName) =>
             AssetDatabase.LoadAssetAtPath<EncounterDefinition>($"{DataRoot}/Encounters/{assetName}.asset");
 
         // ------------------------------------------------------------------ scene
@@ -294,7 +299,7 @@ namespace Game.EditorTools
         }
 
         // The overworld enemy (model, agent, animator) is saved once as a prefab from Dungeon_01's first enemy, so rebuilds do not need it.
-        static void EnsureEnemyTemplate(GameObject root)
+        internal static void EnsureEnemyTemplate(GameObject root)
         {
             if (File.Exists(EnemyTemplatePath)) return;
 
@@ -358,16 +363,16 @@ namespace Game.EditorTools
 
         static Dir Opposite(Dir d) => d == Dir.N ? Dir.S : d == Dir.S ? Dir.N : d == Dir.E ? Dir.W : Dir.E;
 
-        static int Seed(string text)
+        internal static int Seed(string text)
         {
             int hash = 17;
             foreach (var ch in text) hash = hash * 31 + ch;
             return hash;
         }
 
-        static float Jitter(System.Random rng, float amplitude) => (float)(rng.NextDouble() * 2.0 - 1.0) * amplitude;
+        internal static float Jitter(System.Random rng, float amplitude) => (float)(rng.NextDouble() * 2.0 - 1.0) * amplitude;
 
-        static float Range(System.Random rng, float min, float max) => min + (float)rng.NextDouble() * (max - min);
+        internal static float Range(System.Random rng, float min, float max) => min + (float)rng.NextDouble() * (max - min);
 
         /// <summary>
         /// An irregular cave-like room: the four corners wander, every side is a chain of wall pieces pushed in and out (now and then
@@ -429,7 +434,7 @@ namespace Game.EditorTools
         }
 
         /// <summary>A line from <paramref name="from"/> to <paramref name="to"/> broken into pieces whose joints are pushed in or out; ends can be pinned for doorways.</summary>
-        static List<Vector2> Wavy(Vector2 from, Vector2 to, Vector2 inward, System.Random rng, bool taperFrom, bool taperTo)
+        internal static List<Vector2> Wavy(Vector2 from, Vector2 to, Vector2 inward, System.Random rng, bool taperFrom, bool taperTo)
         {
             float length = Vector2.Distance(from, to);
             int pieces = Mathf.Max(1, Mathf.RoundToInt(length / 2.4f));
@@ -470,7 +475,7 @@ namespace Game.EditorTools
             return points;
         }
 
-        static void BuildWallChain(Transform parent, string name, List<Vector2> points, Vector2 center, Material material, System.Random rng)
+        internal static void BuildWallChain(Transform parent, string name, List<Vector2> points, Vector2 center, Material material, System.Random rng)
         {
             for (int i = 0; i + 1 < points.Count; i++)
             {
@@ -488,7 +493,7 @@ namespace Game.EditorTools
         }
 
         /// <summary>A flat top following the outline (a fan from the middle, which suits these roundish rooms) with a short skirt so the collider has some depth.</summary>
-        static Mesh BuildFloorMesh(List<Vector2> ring)
+        internal static Mesh BuildFloorMesh(List<Vector2> ring)
         {
             int n = ring.Count;
             // 0 = middle, 1..n = top outline, n+1..2n = top edge of the skirt, 2n+1..3n = bottom of the skirt (kept apart so shading stays flat).
@@ -616,7 +621,7 @@ namespace Game.EditorTools
             return false;
         }
 
-        static GameObject Box(Transform parent, string name, Vector3 center, Vector3 size, Material material)
+        internal static GameObject Box(Transform parent, string name, Vector3 center, Vector3 size, Material material)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             go.name = name;
@@ -627,9 +632,9 @@ namespace Game.EditorTools
             return go;
         }
 
-        static LootItem Loot(string id, int count) => new LootItem { itemId = id, count = count };
+        internal static LootItem Loot(string id, int count) => new LootItem { itemId = id, count = count };
 
-        static void Chest(Transform parent, Material material, string id, Vector3 position,
+        internal static void Chest(Transform parent, Material material, string id, Vector3 position,
             LootItem[] items = null, string[] weapons = null, string[] armor = null)
         {
             var go = Box(parent, "Chest_" + id, position + new Vector3(0, 0.35f, 0), new Vector3(1f, 0.7f, 0.65f), material);
@@ -642,7 +647,7 @@ namespace Game.EditorTools
             if (armor != null) chest.armorIds = new List<string>(armor);
         }
 
-        static void RestShrine(Transform parent, Material material, string id, Vector3 position, int uses)
+        internal static void RestShrine(Transform parent, Material material, string id, Vector3 position, int uses)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             go.name = "Shrine_" + id;
@@ -657,7 +662,7 @@ namespace Game.EditorTools
             rest.glowRenderer = go.GetComponent<MeshRenderer>();
         }
 
-        static void Door(Transform parent, Material material, string id, Vector3 position, string[] keys)
+        internal static void Door(Transform parent, Material material, string id, Vector3 position, string[] keys)
         {
             var go = Box(parent, "Door_" + id, position + new Vector3(0, WallHeight / 2f, 0), new Vector3(CorridorWidth + WallThickness, WallHeight, 0.5f), material);
             var door = go.AddComponent<LockedDoor>();
@@ -679,9 +684,9 @@ namespace Game.EditorTools
             trap.message = "A pressure plate clicks and darts fly!";
         }
 
-        static readonly Color EliteGem = new Color(0.6f, 0.05f, 0.7f);
+        internal static readonly Color EliteGem = new Color(0.6f, 0.05f, 0.7f);
 
-        static OverworldEnemy Enemy(Transform parent, string id, string encounterName, Vector3 position, params Vector3[] route)
+        internal static OverworldEnemy Enemy(Transform parent, string id, string encounterName, Vector3 position, params Vector3[] route)
         {
             var template = AssetDatabase.LoadAssetAtPath<GameObject>(EnemyTemplatePath);
             var go = (GameObject)PrefabUtility.InstantiatePrefab(template, parent);
@@ -712,9 +717,9 @@ namespace Game.EditorTools
 
         // ------------------------------------------------------------------ helpers
 
-        static Material LoadMaterial(string name) => AssetDatabase.LoadAssetAtPath<Material>($"{SceneFolder}/{name}.mat");
+        internal static Material LoadMaterial(string name) => AssetDatabase.LoadAssetAtPath<Material>($"{SceneFolder}/{name}.mat");
 
-        static Material EnsureMaterial(string name, Color color, Material like)
+        internal static Material EnsureMaterial(string name, Color color, Material like)
         {
             var path = $"{SceneFolder}/{name}.mat";
             var material = AssetDatabase.LoadAssetAtPath<Material>(path);
@@ -726,7 +731,7 @@ namespace Game.EditorTools
             return material;
         }
 
-        static void AddToBuildSettings(string path)
+        internal static void AddToBuildSettings(string path)
         {
             var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
             foreach (var s in scenes) if (s.path == path) return;
@@ -734,7 +739,7 @@ namespace Game.EditorTools
             EditorBuildSettings.scenes = scenes.ToArray();
         }
 
-        static T Create<T>(string folder, string id, string displayName, System.Action<T> configure) where T : GameDefinition
+        internal static T Create<T>(string folder, string id, string displayName, System.Action<T> configure) where T : GameDefinition
         {
             var path = $"{DataRoot}/{folder}/{id}.asset";
             var asset = AssetDatabase.LoadAssetAtPath<T>(path);
@@ -751,7 +756,7 @@ namespace Game.EditorTools
             return asset;
         }
 
-        static void EnsureFolder(string path)
+        internal static void EnsureFolder(string path)
         {
             if (AssetDatabase.IsValidFolder(path)) return;
             var parent = Path.GetDirectoryName(path).Replace('\\', '/');

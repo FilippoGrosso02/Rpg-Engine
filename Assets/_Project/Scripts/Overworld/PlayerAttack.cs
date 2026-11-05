@@ -8,16 +8,17 @@ using UnityEngine;
 namespace Game.Overworld
 {
     /// <summary>
-    /// Left mouse swings the leader's weapon, and what that does depends on the leader's class (<see cref="OverworldAttackStyle"/>):
-    /// a warrior strikes whatever is within reach and never surprises anyone; a thief who has not been spotted points at an enemy
-    /// (the crosshair), walks up to it and ambushes it; a ranger shoots an arrow from afar and ambushes an enemy that has not noticed
-    /// the party. Hitting an enemy group starts the fight, in the arena or on the map alike. An ambush means every hero acts before
+    /// A plain left click is an ordinary melee attack on the closest enemy. Hold the right mouse button to aim (the camera slides over
+    /// the character's shoulder and the crosshair appears), then left mouse performs the class attack. What it does depends on the leader's class (<see cref="OverworldAttackStyle"/>):
+    /// a warrior steps up to an enemy within about five steps and strikes it, never surprising anyone; a thief who has not been spotted
+    /// does the same but ambushes it (and is called off if the enemy notices them on the way); a ranger shoots an arrow from afar and
+    /// ambushes an enemy that has not noticed the party. Hitting an enemy group starts the fight, in the arena or on the map alike. An ambush means every hero acts before
     /// any enemy. The crosshair shows what a click would do: green when a surprise is possible, red (an X) when the target has spotted the party.
     /// Lives next to the <see cref="OverworldDirector"/>.
     /// </summary>
     public class PlayerAttack : MonoBehaviour
     {
-        public enum AimKind { None, Melee, Approach, Shoot }
+        public enum AimKind { None, Engage, Shoot }
 
         public struct Aim
         {
@@ -29,25 +30,26 @@ namespace Game.Overworld
             public bool spotted;
         }
 
-        [Header("Melee")]
-        [Tooltip("How close the player must be to an enemy (or one of its group) to hit it.")]
-        public float reach = 2.4f;
+        [Header("Melee and stealth")]
+        [Tooltip("How far away an enemy can be for a click to step up and strike it (melee classes and the thief): about five steps.")]
+        public float engageRange = 4f;
 
-        [Tooltip("The enemy must be within this angle of where the camera looks.")]
+        [Tooltip("The enemy must be within this angle of where the camera looks (melee classes).")]
         [Range(10f, 180f)] public float coneDegrees = 140f;
 
-        [Header("Aimed attacks (thief / ranger)")]
-        [Tooltip("How far away a thief can point at an enemy to creep up on it.")]
-        public float stealthRange = 14f;
+        [Tooltip("The attacker stops this far from the enemy and swings.")]
+        public float strikeDistance = 1.8f;
 
+        [Header("Ranged")]
         [Tooltip("How far away a ranger can shoot.")]
         public float rangedRange = 22f;
 
-        [Tooltip("How close to the screen centre (pixels) an enemy must be to count as aimed at.")]
+        [Tooltip("How close to the crosshair (pixels) an enemy must be to count as aimed at.")]
         public float aimRadiusPixels = 140f;
 
-        [Tooltip("A thief stops this far from the enemy before striking.")]
-        public float stealthStopDistance = 1.7f;
+        [Header("Crosshair")]
+        [Tooltip("Where the crosshair sits relative to the exact screen centre, as a fraction of the screen height (x right, y up). A little up and away from the character, who stands to the bottom left while aiming.")]
+        public Vector2 reticleOffset = new Vector2(0.02f, 0.03f);
 
         [Tooltip("Arrow speed in metres per second.")]
         public float arrowSpeed = 40f;
@@ -55,6 +57,9 @@ namespace Game.Overworld
         public Aim CurrentAim => _aim;
 
         OverworldDirector _director;
+        OverworldCameraRig _cameraRig;
+        bool _isAiming;
+        OverworldEnemy _hover; // the enemy a plain click would attack (closest within range), when not aiming
         Aim _aim;
         bool _striking;
         bool _walkArrived;
@@ -65,11 +70,28 @@ namespace Game.Overworld
 
         void Awake() => _director = GetComponent<OverworldDirector>();
 
+        /// <summary>Right mouse held = aiming: the camera slides over the character's shoulder, the crosshair appears and left click performs the attack.</summary>
+        void SetAiming(bool aiming)
+        {
+            if (_isAiming != aiming)
+            {
+                _isAiming = aiming;
+                if (_cameraRig == null) _cameraRig = FindAnyObjectByType<OverworldCameraRig>();
+                if (_cameraRig != null) _cameraRig.SetAiming(aiming);
+            }
+
+            if (_director != null && _director.player != null) _director.player.aiming = aiming;
+        }
+
+        void OnDisable() => SetAiming(false);
+
         void Update()
         {
             if (_striking || _director == null || _director.InBattle || _director.player == null)
             {
+                SetAiming(false);
                 _aim = default;
+                _hover = null;
                 return;
             }
 
@@ -80,15 +102,25 @@ namespace Game.Overworld
             }
 
             bool canAct = CanAct();
-            _aim = canAct ? Evaluate() : default;
+            SetAiming(canAct && Input.GetMouseButton(1));
+            _aim = _isAiming ? Evaluate() : default;
+            _hover = !_isAiming && canAct ? FindEngageTarget(360f) : null;
 
             if (!canAct || !Input.GetMouseButtonDown(0)) return;
 
+            if (!_isAiming)
+            {
+                // A plain click is the ordinary melee attack on whoever is closest, whatever the class. Only a Hidden leader surprises anyone.
+                var closest = FindEngageTarget(360f);
+                if (closest != null) StartCoroutine(Engage(closest, PartyRules.Hidden));
+                else StartCoroutine(Strike(null, EncounterAdvantage.None)); // nobody near: just swing
+                return;
+            }
+
             switch (_aim.kind)
             {
-                case AimKind.Approach: StartCoroutine(Approach(_aim.target)); break;
+                case AimKind.Engage: StartCoroutine(Engage(_aim.target, _aim.ambush)); break;
                 case AimKind.Shoot: StartCoroutine(Shoot(_aim.target, _aim.ambush)); break;
-                case AimKind.Melee: StartCoroutine(Strike(_aim.target, _aim.ambush ? EncounterAdvantage.Party : EncounterAdvantage.None)); break;
                 default: StartCoroutine(Strike(null, EncounterAdvantage.None)); break; // nothing there: just swing
             }
         }
@@ -105,37 +137,30 @@ namespace Game.Overworld
         Aim Evaluate()
         {
             var style = CurrentStyle();
-            var spottedHint = false;
-            OverworldEnemy spottedTarget = null;
+
+            // Surprise comes from one place: a Hidden leader (Detached party, successful DEX check) striking. The class only decides how the blow is delivered.
+            bool hidden = PartyRules.Hidden;
 
             if (style != OverworldAttackStyle.Melee)
             {
-                float range = style == OverworldAttackStyle.Stealth ? stealthRange : rangedRange;
+                float range = style == OverworldAttackStyle.Stealth ? engageRange : rangedRange;
                 var aimed = PickAtCrosshair(range);
                 if (aimed != null)
                 {
-                    if (style == OverworldAttackStyle.Ranged)
+                    return new Aim
                     {
-                        bool unnoticed = !aimed.HasNoticedPlayer;
-                        return new Aim { target = aimed, kind = AimKind.Shoot, ambush = unnoticed, spotted = !unnoticed };
-                    }
-
-                    if (!aimed.HasNoticedPlayer) return new Aim { target = aimed, kind = AimKind.Approach, ambush = true };
-
-                    spottedHint = true; // a thief cannot creep up on someone who is watching
-                    spottedTarget = aimed;
+                        target = aimed,
+                        kind = style == OverworldAttackStyle.Ranged ? AimKind.Shoot : AimKind.Engage,
+                        ambush = hidden,
+                        spotted = !hidden && aimed.HasNoticedPlayer
+                    };
                 }
             }
 
-            var melee = FindMeleeTarget();
-            if (melee != null)
-            {
-                // Only a thief gets the drop on someone by walking right up to them.
-                bool ambush = style == OverworldAttackStyle.Stealth && !melee.HasNoticedPlayer;
-                return new Aim { target = melee, kind = AimKind.Melee, ambush = ambush };
-            }
+            var near = FindEngageTarget();
+            if (near != null) return new Aim { target = near, kind = AimKind.Engage, ambush = hidden, spotted = !hidden && near.HasNoticedPlayer };
 
-            return new Aim { target = spottedTarget, kind = AimKind.None, spotted = spottedHint };
+            return default;
         }
 
         OverworldAttackStyle CurrentStyle()
@@ -151,19 +176,20 @@ namespace Game.Overworld
             return _style;
         }
 
-        /// <summary>The nearest enemy group with a member in reach, in front of the camera.</summary>
-        OverworldEnemy FindMeleeTarget()
+        /// <summary>The nearest enemy group with a member within engage range, inside <paramref name="cone"/> degrees of where the camera looks (default: the usual cone).</summary>
+        OverworldEnemy FindEngageTarget(float cone = -1f)
         {
             var playerPosition = _director.player.transform.position;
             var facing = CameraForward();
+            if (cone < 0f) cone = coneDegrees;
 
             OverworldEnemy best = null;
-            float bestDistance = reach;
+            float bestDistance = engageRange;
             foreach (var enemy in _enemies)
             {
                 if (!Attackable(enemy)) continue;
 
-                float distance = enemy.NearestDistanceTo(playerPosition, facing, coneDegrees, out bool inCone);
+                float distance = enemy.NearestDistanceTo(playerPosition, facing, cone, out bool inCone);
                 if (!inCone || distance > bestDistance) continue;
                 best = enemy;
                 bestDistance = distance;
@@ -180,7 +206,7 @@ namespace Game.Overworld
 
             var player = _director.player.transform;
             var eye = player.position + Vector3.up * 1.4f;
-            var centre = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+            var centre = AimScreenPoint();
 
             OverworldEnemy best = null;
             float bestPixels = aimRadiusPixels;
@@ -209,7 +235,11 @@ namespace Game.Overworld
             return best;
         }
 
-        static bool Attackable(OverworldEnemy enemy) => enemy != null && enemy.contactEnabled && enemy.encounter != null;
+        /// <summary>The crosshair's position in screen pixels (origin bottom left).</summary>
+        Vector2 AimScreenPoint() =>
+            new Vector2(Screen.width * 0.5f + reticleOffset.x * Screen.height, Screen.height * 0.5f + reticleOffset.y * Screen.height);
+
+        static bool Attackable(OverworldEnemy enemy) => enemy != null && enemy.contactEnabled && enemy.encounter != null && !enemy.IsLyingInWait;
 
         /// <summary>Walls and pillars block the shot; the enemy's own body does not.</summary>
         static bool HasLineOfSight(Vector3 from, Vector3 to, OverworldEnemy enemy)
@@ -249,51 +279,62 @@ namespace Game.Overworld
             if (target != null && !_director.InBattle) _director.BeginEncounter(target, advantage);
         }
 
-        /// <summary>The thief creeps up to the enemy and ambushes it. Being spotted on the way calls it off.</summary>
-        IEnumerator Approach(OverworldEnemy target)
+        /// <summary>
+        /// Steps up to the enemy and swings. With an ambush in mind (the thief), being spotted on the way calls it off; a melee class
+        /// carries on regardless and simply fights an enemy that is now awake.
+        /// </summary>
+        IEnumerator Engage(OverworldEnemy target, bool ambush)
         {
             var player = _director.player;
             _striking = true;
             _walkArrived = false;
 
             var destination = target.NearestModelPosition(player.transform.position);
-            bool started = player.WalkTo(destination, stealthStopDistance, arrived => _walkArrived = arrived);
-            if (!started)
-            {
-                InteractionSystem.ShowMessage("There is no way to creep up on it.");
-                Finish();
-                yield break;
-            }
+            var flat = destination - player.transform.position;
+            flat.y = 0f;
 
-            while (player.AutoWalking)
+            if (flat.magnitude > strikeDistance)
             {
-                if (target == null || target.HasNoticedPlayer)
+                bool started = player.WalkTo(destination, strikeDistance, arrived => _walkArrived = arrived);
+                if (!started)
                 {
-                    player.CancelAutoWalk();
-                    InteractionSystem.ShowMessage("SPOTTED!");
+                    InteractionSystem.ShowMessage("There is no way to reach it.");
                     Finish();
                     yield break;
                 }
 
-                yield return null;
+                while (player.AutoWalking)
+                {
+                    if (target == null || (ambush && !PartyRules.Hidden))
+                    {
+                        player.CancelAutoWalk();
+                        if (target != null) InteractionSystem.ShowMessage("SPOTTED!");
+                        Finish();
+                        yield break;
+                    }
+
+                    yield return null;
+                }
+
+                if (!_walkArrived || target == null)
+                {
+                    Finish();
+                    yield break;
+                }
             }
 
-            if (!_walkArrived || target == null || target.HasNoticedPlayer)
-            {
-                Finish();
-                yield break;
-            }
-
-            // Close enough: strike.
+            // Close enough: strike. Whether it is still an ambush is decided now, by what the enemy knows.
+            bool stillAmbush = ambush && PartyRules.Hidden;
             player.movementLocked = true;
             _director.AttackPending = true;
             FaceTowards(target);
-            InteractionSystem.ShowMessage("AMBUSH! The party strikes first.");
+            if (stillAmbush) InteractionSystem.ShowMessage("AMBUSH! The party strikes first.");
             float wait = SwingAnimation();
             if (wait > 0f) yield return new WaitForSeconds(wait);
 
             Finish();
-            if (target != null && !_director.InBattle) _director.BeginEncounter(target, EncounterAdvantage.Party);
+            if (target != null && !_director.InBattle)
+                _director.BeginEncounter(target, stillAmbush ? EncounterAdvantage.Party : EncounterAdvantage.None);
         }
 
         /// <summary>The ranger looses an arrow; it lands, and the fight starts (an ambush if the enemy had not noticed the party when it was fired).</summary>
@@ -304,6 +345,7 @@ namespace Game.Overworld
             player.movementLocked = true;
             _director.AttackPending = true;
             FaceTowards(target);
+            ambush = ambush && PartyRules.Hidden;
             if (ambush) InteractionSystem.ShowMessage("AMBUSH! The party strikes first.");
 
             float release = SwingAnimation(followThrough: 0f);
@@ -356,31 +398,49 @@ namespace Game.Overworld
             if (_director == null || _director.InBattle || _striking || Cursor.lockState != CursorLockMode.Locked || Time.timeScale <= 0f) return;
             if (DemoEndPanel.IsOpen) return;
 
+            // The cursor only appears when there is something in range to act on.
+            if (_isAiming ? _aim.target == null : _hover == null) return;
+
             Color color = new Color(1f, 1f, 1f, 0.8f);
-            string caption = null;
+            string caption = "ATTACK";
             bool cross = false;
-            float size = 1f;
+            float size = 1.2f;
+            Vector2 point;
 
-            if (_aim.ambush)
+            if (_isAiming)
             {
-                color = new Color(0.45f, 1f, 0.5f, 0.95f);
-                caption = _aim.kind == AimKind.Shoot ? "AMBUSH SHOT" : _aim.kind == AimKind.Approach ? "STEALTH ATTACK" : "BACKSTAB";
-                size = 1.5f;
+                point = AimScreenPoint();
+                if (_aim.ambush)
+                {
+                    color = new Color(0.45f, 1f, 0.5f, 0.95f);
+                    caption = _aim.kind == AimKind.Shoot ? "AMBUSH SHOT" : "STEALTH ATTACK";
+                    size = 1.5f;
+                }
+                else if (_aim.spotted)
+                {
+                    color = new Color(1f, 0.3f, 0.25f, 0.95f);
+                    caption = _aim.kind == AimKind.Shoot ? "SPOTTED - NO SURPRISE" : "SPOTTED";
+                    cross = true;
+                    size = 1.4f;
+                }
+                else if (_aim.kind != AimKind.Engage)
+                {
+                    caption = null;
+                    size = 1f;
+                }
             }
-            else if (_aim.spotted)
+            else
             {
-                color = new Color(1f, 0.3f, 0.25f, 0.95f);
-                caption = _aim.kind == AimKind.Shoot ? "SPOTTED - NO SURPRISE" : "SPOTTED";
-                cross = true;
-                size = 1.4f;
-            }
-            else if (_aim.kind == AimKind.Melee)
-            {
-                caption = "ATTACK";
-                size = 1.2f;
+                // Not aiming: a small marker over the enemy that a left click would walk up to and attack.
+                var camera = Camera.main;
+                if (camera == null) return;
+                var from = _director.player.transform.position;
+                var onScreen = camera.WorldToScreenPoint(_hover.NearestModelPosition(from) + Vector3.up * 1.2f);
+                if (onScreen.z <= 0f) return;
+                point = new Vector2(onScreen.x, onScreen.y);
             }
 
-            float cx = Screen.width * 0.5f, cy = Screen.height * 0.5f;
+            float cx = point.x, cy = Screen.height - point.y; // IMGUI's y runs downwards
             DrawReticle(cx, cy, color, size, cross);
 
             if (caption == null) return;

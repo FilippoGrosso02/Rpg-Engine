@@ -20,5 +20,17 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/_Project/Scenes/Overworld/Dungeon_02.unity
     guid: d80aafb765072f0439baf953831cb47d
+  - enabled: 1
+    path: Assets/_Project/Scenes/Battle/BattleArena_Cave.unity
+    guid: ea68c99fe25f3764dafb9fa458136f07
+  - enabled: 1
+    path: Assets/_Project/Scenes/Battle/BattleArena_Crypt.unity
+    guid: 4ca813de396a5334b9a10cd28640c7fd
+  - enabled: 1
+    path: Assets/_Project/Scenes/Battle/BattleArena_Lair.unity
+    guid: 313c9035c5e716f44a18884f7149f22a
+  - enabled: 1
+    path: Assets/_Project/Scenes/Overworld/Dungeon_03.unity
+    guid: 946cbe1070f87aa48a4311fe50ba822b
   m_configObjects:
     com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f, type: 2}

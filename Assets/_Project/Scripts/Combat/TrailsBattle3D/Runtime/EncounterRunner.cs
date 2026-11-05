@@ -27,6 +27,8 @@ namespace Game.Combat.TrailsBattle3D.Runtime
     public class EncounterRunner : MonoBehaviour, IEncounterRunner, IInPlaceEncounterRunner, ISurpriseEncounterRunner, ICombatEvents, IPlayerCommandInput
     {
         private const string BattleSceneName = "BattleArena_01";
+        private const string ArenaScenePrefix = "BattleArena_";
+        private string _arenaSceneName = BattleSceneName;
         private const int MaxTurns = 500;
         private const float MoveSpeed = 6f;
         private const float MaxReactionWait = 0.6f;
@@ -347,9 +349,10 @@ namespace Game.Combat.TrailsBattle3D.Runtime
 
             if (_inPlace == null)
             {
-                yield return SceneManager.LoadSceneAsync(BattleSceneName, LoadSceneMode.Additive);
+                _arenaSceneName = ResolveArenaScene(_encounter);
+                yield return SceneManager.LoadSceneAsync(_arenaSceneName, LoadSceneMode.Additive);
 
-                _battleScene = SceneManager.GetSceneByName(BattleSceneName);
+                _battleScene = SceneManager.GetSceneByName(_arenaSceneName);
                 _spawnPoints = FindSpawnPoints(_battleScene);
                 _partyForward = Vector3.forward;
                 _inPlaceLayout = null;
@@ -1434,6 +1437,24 @@ namespace Game.Combat.TrailsBattle3D.Runtime
             }
 
             OnTurnOrderChanged?.Invoke(_scheduler.PreviewUpcomingOrder(TurnOrderPreviewCount));
+        }
+
+        /// <summary>The arena named by the encounter (BattleArena_&lt;template&gt;) if that scene is part of the build, else the default one.</summary>
+        private static string ResolveArenaScene(EncounterDefinition encounter)
+        {
+            if (encounter == null || string.IsNullOrEmpty(encounter.arenaTemplate))
+            {
+                return BattleSceneName;
+            }
+
+            var wanted = ArenaScenePrefix + encounter.arenaTemplate;
+            if (Application.CanStreamedLevelBeLoaded(wanted))
+            {
+                return wanted;
+            }
+
+            Debug.LogWarning($"[EncounterRunner] Arena scene '{wanted}' is not in the build; using {BattleSceneName}.");
+            return BattleSceneName;
         }
 
         /// <summary>The player's roster if one is set up (and the encounter doesn't force its own party); otherwise the encounter's list.</summary>

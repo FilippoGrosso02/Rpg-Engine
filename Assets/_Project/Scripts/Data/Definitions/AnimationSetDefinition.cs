@@ -15,6 +15,10 @@ namespace Game.Data.Definitions
         public AnimationClip idle;
         public AnimationClip run;
 
+        [Header("Sneaking (optional; used while the leader is Hidden)")]
+        public AnimationClip sneakIdle;
+        public AnimationClip sneak;
+
         [Header("Reactions")]
         public AnimationClip guard;
         [Tooltip("One is picked at random per hit.")]

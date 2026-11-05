@@ -30,7 +30,7 @@ namespace Game.Overworld.Menu
         {
             _hasFollowers = Object.FindAnyObjectByType<PartyFollowers>() != null;
             var items = new List<string>();
-            if (_hasFollowers) items.Add(PartyFollowers.Following ? "PARTY FOLLOW: ON" : "PARTY FOLLOW: OFF");
+            if (_hasFollowers) items.Add(PartyRules.Mode == PartyMode.Attached ? "PARTY: ATTACHED" : "PARTY: DETACHED");
             items.AddRange(new[] { "SAVE GAME", "SETTINGS", "QUIT" });
             _list.SetItems(items, keepIndex: true);
             _list.Focused = !_confirmingQuit;
@@ -56,10 +56,10 @@ namespace Game.Overworld.Menu
             switch (choice)
             {
                 case -1:
-                    PartyFollowers.Following = !PartyFollowers.Following;
-                    MenuText.SetBlock(_message, PartyFollowers.Following
-                        ? "THE PARTY FOLLOWS YOU AGAIN."
-                        : "THE PARTY HOLDS ITS GROUND,\nBUT STAYS WITHIN FIGHTING RANGE.");
+                    PartyRules.SetMode(PartyRules.Mode == PartyMode.Attached ? PartyMode.Detached : PartyMode.Attached);
+                    MenuText.SetBlock(_message, PartyRules.Mode == PartyMode.Attached
+                        ? "ATTACHED: THE PARTY STAYS CLOSE.\nTHE LEADER CAN CHANGE."
+                        : "DETACHED: THE PARTY HOLDS ITS GROUND.\nSHIFT TOGGLES SNEAKING.");
                     Refresh();
                     break;
                 case 0:

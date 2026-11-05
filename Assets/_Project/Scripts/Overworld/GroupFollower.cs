@@ -48,6 +48,7 @@ namespace Game.Overworld
 
         [HideInInspector] public Action arrived;
 
+
         /// <summary>Asked every frame: true = trail the leader, false = hold position (within the leash).</summary>
         public Func<bool> follow = () => true;
 

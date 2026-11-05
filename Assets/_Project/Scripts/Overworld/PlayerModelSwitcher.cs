@@ -44,14 +44,20 @@ namespace Game.Overworld
 
         void Update()
         {
-            if (Input.GetKeyDown(cycleKey))
+            if (Input.GetKeyDown(cycleKey) && !PartyRules.CanSwitchLeader)
+            {
+                InteractionSystem.ShowMessage("The leader cannot change while the party is detached. Attach (R) first.");
+            }
+            else if (Input.GetKeyDown(cycleKey))
             {
                 // With followers the next hero has to walk up first; alone (or without models) the switch is immediate.
                 var followers = FindAnyObjectByType<PartyFollowers>();
                 if (followers == null || !followers.RequestSwitch()) PartyRoster.CycleLeader();
             }
 
+            _animator.SetSneaking(PartyRules.Hidden);
             float full = fullRunSpeed > 0f ? fullRunSpeed : (_player != null ? _player.moveSpeed : 5f);
+            if (PartyRules.Hidden && _player != null) full *= _player.sneakSpeedFactor; // a full sneak is a slower walk
             var v = _controller.velocity;
             float target = Mathf.Clamp01(new Vector2(v.x, v.z).magnitude / Mathf.Max(0.01f, full));
             _blend = Mathf.MoveTowards(_blend, target, 8f * Time.deltaTime);

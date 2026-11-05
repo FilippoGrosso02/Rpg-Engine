@@ -28,6 +28,9 @@ namespace Game.Common
         private float _oneShotWeight;
         private float _speed01;
         private int _comboIndex;
+        private bool _hasSneak;
+        private bool _sneaking;
+        private float _sneakWeight;
 
         public AnimationSetDefinition Set => _set;
 
@@ -85,13 +88,21 @@ namespace Game.Common
             var output = AnimationPlayableOutput.Create(_graph, "Animation", animator);
 
             _top = AnimationMixerPlayable.Create(_graph, 2);
-            _locomotion = AnimationMixerPlayable.Create(_graph, 2);
+            _locomotion = AnimationMixerPlayable.Create(_graph, 4);
+            _hasSneak = set.sneakIdle != null && set.sneak != null;
+            _sneakWeight = 0f;
             _graph.Connect(_locomotion, 0, _top, 0);
             _top.SetInputWeight(0, 1f);
             _top.SetInputWeight(1, 0f);
 
             ConnectLoop(set.idle, 0);
             ConnectLoop(set.run, 1);
+            if (_hasSneak)
+            {
+                ConnectLoop(set.sneakIdle, 2);
+                ConnectLoop(set.sneak, 3);
+            }
+
             ApplyLocomotionWeights();
 
             output.SetSourcePlayable(_top);
@@ -206,12 +217,31 @@ namespace Game.Common
                 return;
             }
 
-            _locomotion.SetInputWeight(0, 1f - _speed01);
-            _locomotion.SetInputWeight(1, _speed01);
+            float sneak = _hasSneak ? _sneakWeight : 0f;
+            _locomotion.SetInputWeight(0, (1f - sneak) * (1f - _speed01));
+            _locomotion.SetInputWeight(1, (1f - sneak) * _speed01);
+            if (_hasSneak)
+            {
+                _locomotion.SetInputWeight(2, sneak * (1f - _speed01));
+                _locomotion.SetInputWeight(3, sneak * _speed01);
+            }
         }
+
+        /// <summary>Crouched locomotion (needs the set's sneak clips; without them this does nothing). Blends in and out.</summary>
+        public void SetSneaking(bool sneaking) => _sneaking = sneaking;
 
         private void Update()
         {
+            if (_hasSneak && _graph.IsValid())
+            {
+                float before = _sneakWeight;
+                _sneakWeight = Mathf.MoveTowards(_sneakWeight, _sneaking ? 1f : 0f, Time.deltaTime / 0.2f);
+                if (!Mathf.Approximately(before, _sneakWeight))
+                {
+                    ApplyLocomotionWeights();
+                }
+            }
+
             if (!_graph.IsValid() || !_hasOneShot)
             {
                 return;

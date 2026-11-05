@@ -14,6 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Game.Data::Game.Data.Definitions.AnimationSetDefinition
   idle: {fileID: 7400000, guid: 1b267cb3f5052f0498d92ccf9ed7546a, type: 2}
   run: {fileID: 7400000, guid: 8b7edae5b7999564bac5c390964fcd7e, type: 2}
+  sneakIdle: {fileID: -595300085847744924, guid: fa9977cfde8c9ee4ab914acbdb43cde5, type: 3}
+  sneak: {fileID: 4452715372521783083, guid: 3bb423d3c0b25134f8a544d95cf09ea3, type: 3}
   guard: {fileID: 7400000, guid: 779d0165b9346cf40a03bc12985d447e, type: 2}
   hits:
   - {fileID: 7400000, guid: 523edb3deb197a847a5b61065756cd58, type: 2}
